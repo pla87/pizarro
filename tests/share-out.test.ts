@@ -260,7 +260,7 @@ test("página: botones con el título de su tarea para lectores de pantalla, con
 test("marca de la cabecera: revocado o caducado", () => {
   const now = new Date("2026-06-15T12:00:00Z");
   const used = new Date("2026-06-10T12:00:00Z");
-  const base = { columnId: "c1", tokenHash: "h", expiryDays: 30, generatedAt: used, generatedByName: null, lastUsedAt: null, revokedAt: null, taskIds: [] };
+  const base = { columnId: "c1", tokenHash: "h", expiryDays: 30, generatedAt: used, lastUsedAt: null, revokedAt: null, taskIds: [] };
   // «Revocar enlace» con el enlace activo.
   const revoked = boardShareOf({ ...base, revokedAt: new Date("2026-06-12T08:00:00Z") }, now);
   assert.deepEqual([revoked.state, revoked.revoked], ["ended", true]);
@@ -322,8 +322,17 @@ test("página: quién la comparte, imágenes como bloque, miniaturas de los adju
   const files = html.slice(html.indexOf('<ul class="files">'));
   const thumb = shareAttachmentPath(pageData().token, "a1", "thumb");
   assert.ok(thumb.endsWith("?inline=thumb"));
-  assert.ok(files.includes(`<a href="${shareAttachmentPath(pageData().token, "a1")}"><img src="${thumb}" alt="plano.webp" loading="lazy"></a>`), "miniatura de la imagen adjunta, que enlaza a la descarga normal");
+  assert.ok(files.includes(`<a href="${shareAttachmentPath(pageData().token, "a1", "open")}" target="_blank" rel="noopener noreferrer"><img src="${thumb}" alt="plano.webp" loading="lazy"></a>`), "miniatura de la imagen adjunta: abre la imagen en otra pestaña (no la descarga)");
   assert.ok(files.includes(`href="${shareAttachmentPath(pageData().token, "a1")}">plano.webp</a>`), "el nombre sigue siendo la descarga");
+  // «Cambiar fecha»: no antes de la fecha de inicio; avisos propios; y «copia tu texto» solo si falló un comentario.
+  const dated = { ...pageData().tasks[0]!, startDate: "2026-12-01" };
+  assert.ok(sharePageHtml(pageData({ tasks: [dated] }), t).includes('name="due" value="2026-12-03" min="2026-12-01"'));
+  assert.ok(!sharePageHtml(pageData(), t).includes(' min="'));
+  assert.ok(sharePageHtml(pageData({ notice: "early", noticeTaskId: "t1", tasks: [dated] }), t).includes("La fecha no puede ser anterior al 1 de diciembre de 2026."));
+  assert.ok(sharePageHtml(pageData({ notice: "same", noticeTaskId: "t1" }), t).includes("La fecha no ha cambiado."));
+  assert.ok(sharePageHtml(pageData({ notice: "invalid", noticeTaskId: "t1", noticeFromComment: true }), t).includes("No se ha podido guardar: revisa los datos. Copia tu texto antes de volver a intentarlo."));
+  assert.ok(!sharePageHtml(pageData({ notice: "invalid", noticeTaskId: "t1" }), t).includes("Copia tu texto"));
+  assert.ok(!sharePageHtml(pageData({ notice: "comment", noticeTaskId: "t1", noticeFromComment: true }), t).includes("Copia tu texto"));
   // El aviso, en la tarjeta de su tarea; sin tarea, arriba del todo.
   const here = sharePageHtml(pageData({ notice: "done", noticeTaskId: "t1" }), t);
   const card = here.slice(here.indexOf('<section class="card" id="t-t1">'));

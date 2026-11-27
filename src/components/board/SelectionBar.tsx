@@ -11,7 +11,8 @@ interface Props {
   columns: BoardColumn[];
   nextReleaseColumn?: BoardColumn;
   onMove: (columnId: string) => void;
-  onRelease: () => void;
+  /** Sin él (el proyecto no usa releases) no se ofrece «Release con selección». */
+  onRelease?: () => void;
   onArchive: () => void;
   onDelete: () => void;
   onClear: () => void;
@@ -56,9 +57,11 @@ export function SelectionBar({ count, columns, nextReleaseColumn, onMove, onRele
             ))}
           </select>
         </label>
-        <button className="btn-secondary min-w-0 px-2 py-1.5 text-xs md:px-3 md:text-sm" onClick={onRelease}>
-          <Rocket size={15} className="shrink-0" /> <span className="truncate">{t("Release con selección")}</span>
-        </button>
+        {onRelease && (
+          <button className="btn-secondary min-w-0 px-2 py-1.5 text-xs md:px-3 md:text-sm" onClick={onRelease}>
+            <Rocket size={15} className="shrink-0" /> <span className="truncate">{t("Release con selección")}</span>
+          </button>
+        )}
         {/* Exportar a JSON: en el móvil y la tableta la cabecera (con «Exportar (N)») no se ve. */}
         <ExportMenu
           align="start"

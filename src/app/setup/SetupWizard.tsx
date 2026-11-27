@@ -72,8 +72,10 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLan
   const [info, setInfo] = useState<string | null>(null);
   const [pending, start] = useActionTransition(setError);
 
-  const go = (n: number) => {
-    setError(null);
+  // `keepError`: al volver del paso 4 al 3 el error de «Terminar configuración» se queda, porque suele ser de un campo del 3
+  // (email o contraseña no válidos): ahí se ve (errorBox) y se corrige; «Terminar» lo borra al reintentar.
+  const go = (n: number, keepError = false) => {
+    if (!keepError) setError(null);
     setInfo(null);
     setStep(n);
   };
@@ -210,7 +212,7 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLan
               {infoBox}
               {errorBox}
               <div className="flex gap-2">
-                <button type="button" className="btn-secondary" onClick={() => go(3)} disabled={pending}>{t("Atrás")}</button>
+                <button type="button" className="btn-secondary" onClick={() => go(3, true)} disabled={pending}>{t("Atrás")}</button>
                 <button type="button" id="setup-finish" className="btn-primary flex-1" onClick={finish} disabled={pending}>
                   {busy}
                   {t("Terminar configuración")}

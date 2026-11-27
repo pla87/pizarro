@@ -2,18 +2,32 @@
 import type { T } from "../i18n/core";
 import { formatDay } from "./dates";
 
-export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY" | "WAITING" | "PROJECT_TO_TEAM" | "REPORT_UNSUBSCRIBED";
+export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY" | "WAITING" | "PROJECT_TO_TEAM" | "REPORT_UNSUBSCRIBED" | "SHARE_REVOKED";
 
 /** Avisos cuyo extracto es lo que alguien ha escrito (un comentario, una respuesta o el texto con la mención). */
 export const quotesWriting = (kind: NotificationKind | undefined): boolean => kind === undefined || kind === "MENTION" || kind === "COMMENT" || kind === "REPLY";
 
 /** Avisos de un proyecto, no de una tarea: llevan al proyecto y en `task` va el nombre del proyecto. */
-export const isProjectNotice = (kind: NotificationKind): boolean => kind === "PROJECT_TO_TEAM" || kind === "REPORT_UNSUBSCRIBED";
+export const isProjectNotice = (kind: NotificationKind): boolean => kind === "PROJECT_TO_TEAM" || kind === "REPORT_UNSUBSCRIBED" || kind === "SHARE_REVOKED";
 
 /** Adónde lleva un aviso de proyecto: al tablero o, la baja del informe semanal, a Ajustes del proyecto → Informes. */
 export function projectNoticePath(kind: NotificationKind, projectId: string): string {
   return kind === "REPORT_UNSUBSCRIBED" ? `/p/${projectId}/settings?tab=informes` : `/p/${projectId}`;
 }
+
+const REVOKED_SEP = "";
+
+// Extracto del aviso SHARE_REVOKED: «quien␞columna» (los dos con el separador U+001E cambiado por un espacio). Lo
+// escribirá la v1.75 al revocar el enlace (`${who}${REVOKED_SEP}${column}`); la v1.74 ya sabe pintarlo.
+
+/** Quién y qué columna de un aviso SHARE_REVOKED. */
+function shareRevokedParts(excerpt: string): { who: string; column: string } {
+  const [who = "", ...rest] = excerpt.split(REVOKED_SEP);
+  return { who, column: rest.join(" ") };
+}
+
+/** Quien provoca un aviso de proyecto: lo que guarda el extracto (la cuenta borrada, quien se dio de baja, quien revocó). */
+export const projectNoticeActor = (kind: NotificationKind, excerpt: string): string => (kind === "SHARE_REVOKED" ? shareRevokedParts(excerpt).who : excerpt);
 
 /**
  * Frase de cabecera del aviso, con `{actor}` y `{task}` ya sustituidos por los textos recibidos. En un aviso de proyecto
@@ -25,6 +39,7 @@ export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor
   switch (kind) {
     case "PROJECT_TO_TEAM": return t("El proyecto {task} de {actor} ha pasado a ser de equipo al borrarse su cuenta", vars);
     case "REPORT_UNSUBSCRIBED": return t("{actor} se ha dado de baja del informe semanal de {task}", vars);
+    case "SHARE_REVOKED": return t("{actor} ha revocado el enlace de la web de «{column}»", { actor: vars.actor, column: shareRevokedParts(vars.excerpt ?? "").column });
     case "ASSIGNED": {
       // Un lote (alta masiva o importación): un solo aviso que enlaza a la primera tarea; la cabecera dice cuántas son.
       const n = vars.excerpt === undefined ? null : assignedBatchCount(vars.excerpt);
@@ -85,6 +100,7 @@ export function notificationBody(kind: NotificationKind, excerpt: string, t: T, 
     case "PROJECT_TO_TEAM": return t("Ahora lo ven los administradores. Ábrelo para darle miembros, añadirlo a tus proyectos o borrarlo.");
     // El extracto guarda quién se dio de baja (ya va en la cabecera).
     case "REPORT_UNSUBSCRIBED": return t("El informe ya no se envía. Solo esa persona puede volver a activarlo para sí misma; puedes elegir otro destinatario en Ajustes del proyecto → Informes.");
+    case "SHARE_REVOKED": return t("Esa web ya no está disponible. Puedes generar otra desde la columna.");
     case "DUE_CHANGED": return dueChangeText(excerpt, t, locale);
     case "WAITING": return waitingText(excerpt, t);
     case "ASSIGNED": {

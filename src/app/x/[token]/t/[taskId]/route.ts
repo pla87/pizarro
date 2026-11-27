@@ -39,7 +39,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string;
   const start = performance.now();
   const hash = `#t-${encodeURIComponent(taskId)}`;
   // `t`: la tarea a la que se refiere el aviso, para pintarlo en su tarjeta (el servidor no ve el `#`).
-  const msg = (m: string) => `?m=${m}&t=${encodeURIComponent(taskId)}`;
+  // `o=comment`: el aviso es de un comentario (si no se guarda, la página pide copiar el texto antes de reintentar).
+  const msg = (m: string, op = "") => `?m=${m}&t=${encodeURIComponent(taskId)}${op === "comment" ? "&o=comment" : ""}`;
   // El cuerpo: demasiado grande, demasiado lento o mal formado (un multipart roto hace que formData() lance un
   // TypeError) es un formulario que no vale, no un fallo del servidor: vuelve con «no se ha podido» y sin registrar nada.
   let form: FormData | URLSearchParams;
@@ -67,5 +68,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string;
   }
   // Hacer algo en la página también es usarla (si no se puede apuntar, el cambio ya está hecho: no es un 500).
   await noteShareUse(resolved.share).catch((err) => console.error("[share-out] uso", err));
-  return back(token, msg(notice), hash);
+  return back(token, msg(notice, op), hash);
 }

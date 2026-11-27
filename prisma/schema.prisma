@@ -713,6 +713,9 @@ enum NotificationType {
   /// A quien configuró el informe semanal: su destinatario se ha dado de baja desde el enlace del email (projectId;
   /// excerpt = nombre de esa persona o, si no tiene cuenta, su dirección enmascarada).
   REPORT_UNSUBSCRIBED
+  /// A quien generó la web de «Compartir fuera»: otra persona del proyecto revocó su enlace (projectId; excerpt =
+  /// «quiencolumna», ver shareRevokedExcerpt). Solo se añade el valor (v1.74): la v1.75 empezará a escribirlo.
+  SHARE_REVOKED
 }
 
 /// Seguimiento de una tarea. Se sigue implícitamente al crearla, tener asignada, comentar o ser mencionado
@@ -749,8 +752,8 @@ model ColumnShare {
   generatedAt     DateTime?
   /// Quién generó o actualizó la web por última vez (sin clave ajena; al borrar la cuenta se vacían los dos).
   generatedById   String?
-  /// Ya no se escribe ni se lee (el nombre se lee de la cuenta por generatedById); se quitará en una versión posterior.
-  generatedByName String?
+  // `generatedByName` (en desuso) ya no está en el esquema, pero sigue en la base: la v1.73 aún la lee y la vacía al borrar
+  // una cuenta, y volver a ella tras migrar fallaría. La v1.75 la borra (DROP COLUMN), cuando la versión anterior ya no la conoce.
   /// Último uso (abrir la página o generar/actualizar): de aquí cuenta la caducidad.
   lastUsedAt      DateTime?
   /// El enlace actual se revocó (a mano, al quitar la función, al borrar la columna o al apagarla en el proyecto).

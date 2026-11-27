@@ -8,7 +8,7 @@ import { describe, test } from "node:test";
 import { asUser, db, expectFail, expectOk, loginAs, logout, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { deleteDocument, renameDocument } from "../../src/actions/documents";
 import { DOCUMENTS_MAX_PER_PROJECT } from "../../src/lib/document-kind";
-import { createDocumentWithinLimit, findDocumentForUser, listProjectDocuments, listProjectDocumentsOf, listTrashedDocumentsOf } from "../../src/lib/documents";
+import { createDocumentWithinLimit, findDocumentForUser, listProjectDocumentsOf, listTrashedDocumentsOf } from "../../src/lib/documents";
 import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
 import { purgeProject } from "../../src/lib/project-delete";
 import { storageUsage } from "../../src/lib/storage-usage";
@@ -42,8 +42,7 @@ describe("documentación: acceso", () => {
     const doc = await db.projectDocument.create({ data: row(f.project.id, member.id) });
     await saveDocumentFile(doc.id, Buffer.from("hola"));
 
-    assert.equal((await listProjectDocuments(await userOf(member.id), f.project.id)).length, 1);
-    await assert.rejects(listProjectDocuments(await userOf(outsider.id), f.project.id), NOT_FOUND);
+    assert.equal((await listProjectDocumentsOf(f.project.id)).length, 1);
     assert.equal(await findDocumentForUser(await userOf(outsider.id), doc.id), null);
     assert.ok(await findDocumentForUser(await userOf(member.id), doc.id));
 
@@ -72,9 +71,11 @@ describe("documentación: acceso", () => {
     const team = await makeProject({ members: [] });
     await db.projectDocument.create({ data: row(priv.project.id, owner.id) });
     await db.projectDocument.create({ data: row(team.project.id, owner.id) });
-    assert.equal((await listProjectDocuments(await userOf(owner.id), priv.project.id)).length, 1);
-    await assert.rejects(listProjectDocuments(await userOf(otherAdmin.id), priv.project.id), NOT_FOUND);
-    assert.equal((await listProjectDocuments(await userOf(otherAdmin.id), team.project.id)).length, 1);
+    const privDoc = await db.projectDocument.findFirstOrThrow({ where: { projectId: priv.project.id } });
+    const teamDoc = await db.projectDocument.findFirstOrThrow({ where: { projectId: team.project.id } });
+    assert.ok(await findDocumentForUser(await userOf(owner.id), privDoc.id));
+    assert.equal(await findDocumentForUser(await userOf(otherAdmin.id), privDoc.id), null);
+    assert.ok(await findDocumentForUser(await userOf(otherAdmin.id), teamDoc.id));
   });
 
   test("la lista solo trae los documentos de su proyecto", async () => {
@@ -83,7 +84,7 @@ describe("documentación: acceso", () => {
     const b = await makeProject({ members: [m] });
     await db.projectDocument.create({ data: row(a.project.id, m.id, 1, "a.txt") });
     await db.projectDocument.create({ data: row(b.project.id, m.id, 1, "b.txt") });
-    const list = await listProjectDocuments(await userOf(m.id), a.project.id);
+    const list = await listProjectDocumentsOf(a.project.id);
     assert.deepEqual(list.map((d) => d.name), ["a.txt"]);
   });
 });

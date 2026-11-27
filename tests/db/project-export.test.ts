@@ -196,11 +196,11 @@ describe("exportar e importar un proyecto", () => {
       const sums = (m: ExportManifest) => ({ ...m, checksums: { ...m.checksums, "project.json": "" } });
       assert.deepEqual(sums(again.manifest), sums(built.manifest));
 
-      // El proyecto nuevo es de equipo, lo trabaja quien importa y mantiene a los miembros asignados.
+      // El proyecto nuevo es de equipo, quien importa es miembro y lo trabaja, y mantiene a los miembros asignados.
       const created = await db.project.findUniqueOrThrow({ where: { id: summary.projectId }, include: { members: true, adminPicks: true } });
       assert.equal(created.isPrivate, false);
       assert.deepEqual(created.adminPicks.map((p) => p.userId), [admin.id]);
-      assert.deepEqual(created.members.map((m) => m.userId), [member.id]);
+      assert.deepEqual(created.members.map((m) => m.userId).sort(), [admin.id, member.id].sort());
       assert.equal(summary.addedMembers, 1);
       // El original sigue intacto.
       assert.equal(await db.task.count({ where: { projectId } }), 3);

@@ -325,12 +325,6 @@ function readTable(tokens: readonly Token[]): Row[] {
   return rows;
 }
 
-/** Tabla Markdown de una tabla HTML (de <table> a </table>), o null si no merece serlo (vacía o de una sola celda). */
-export function htmlTableToMarkdown(tableHtml: string): string | null {
-  if (tableHtml.length > MAX_TABLE_HTML) return null;
-  return tableFromTokens(tokenize(tableHtml));
-}
-
 function tableFromTokens(tokens: readonly Token[]): string | null {
   const rows = readTable(tokens);
   if (!rows.length) return null;

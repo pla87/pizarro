@@ -6,9 +6,14 @@ import { test } from "node:test";
 import { MarkdownManager } from "@tiptap/markdown";
 import { formatExtensions, tableRows } from "../src/lib/editor-extensions";
 import { markdownToHtml } from "../src/lib/markdown-html";
-import { cellMarkdown, escapeCellText, htmlTableToMarkdown, markdownTablePlaceholder, replaceHtmlTables, tablesOnlyMarkdown } from "../src/lib/paste-table";
+import { cellMarkdown, escapeCellText, markdownTablePlaceholder, replaceHtmlTables, tablesOnlyMarkdown } from "../src/lib/paste-table";
 
 const fixture = (name: string) => fs.readFileSync(path.join(import.meta.dirname, "fixtures", "paste", name), "utf8");
+/** Markdown de una tabla HTML suelta, o null si no se convierte. */
+const htmlTableToMarkdown = (html: string): string | null => {
+  const out = replaceHtmlTables(html, (md) => md);
+  return out === html ? null : out;
+};
 /** Tablas que salen de un HTML pegado, y el HTML con «[[T]]» en su lugar. */
 function convert(html: string) {
   const tables: string[] = [];

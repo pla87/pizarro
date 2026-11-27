@@ -392,7 +392,9 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
           <p className="text-xs text-slate-500">
             {status.lastRestoreTest.mode === "database"
               ? t("Restaurada de verdad en una base de datos temporal, que después se borra.")
-              : status.lastRestoreTest.limit === "createdb"
+              : status.lastRestoreTest.limit === "disk"
+                ? t("Sin espacio para restaurar entera: se ha comprobado el archivo.")
+                : status.lastRestoreTest.limit === "createdb"
                 ? t("Solo se descifró y se comprobó la copia: el usuario de la base de datos no puede crear bases de datos para restaurarla en una temporal.")
                 : t("Solo se descifró y se comprobó la copia.")}
             {status.lastRestoreTest.objectsChecked !== undefined && ` ${t("Ficheros comprobados en los destinos: {n}, y {m} abiertos de muestra para ver que se leen bien.", { n: status.lastRestoreTest.objectsChecked, m: status.lastRestoreTest.objectsSampled ?? 0 })}`}

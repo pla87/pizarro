@@ -1,8 +1,9 @@
 "use client";
 
-import { Info, X } from "lucide-react";
+import { Info, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "@/i18n/client";
+import { OPEN_PEOPLE_COLUMNS_EVENT } from "./NewColumnButton";
 
 /**
  * Descripciones por enseñar, por proyecto: «Nuevo proyecto» (AppShell) apunta aquí la del que acaba de crear desde una
@@ -30,7 +31,7 @@ export function useProjectIntro(projectId: string): string {
  * Descripción del proyecto encima de las columnas, en la primera visita tras crearlo desde una plantilla (antes solo se veía
  * en Ajustes del proyecto). Sin base de datos: es un aviso de una sola vez, que se cierra con su X.
  */
-export function ProjectIntroNotice({ description }: { description: string }) {
+export function ProjectIntroNotice({ description, byPeople }: { description: string; byPeople?: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(true);
   if (!open || !description.trim()) return null;
@@ -42,7 +43,14 @@ export function ProjectIntroNotice({ description }: { description: string }) {
       className="mx-3 mt-2 flex items-start gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-slate-700 md:mx-4 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-slate-200"
     >
       <Info size={16} className="mt-0.5 shrink-0 text-brand-600 dark:text-brand-300" aria-hidden />
-      <p className="min-w-0 flex-1 whitespace-pre-line">{description.trim()}</p>
+      <div className="min-w-0 flex-1">
+        <p className="whitespace-pre-line">{description.trim()}</p>
+        {byPeople && (
+          <button type="button" className="mt-1.5 flex items-center gap-1.5 text-left text-sm font-medium text-brand-700 hover:underline dark:text-brand-300" onClick={() => window.dispatchEvent(new Event(OPEN_PEOPLE_COLUMNS_EVENT))}>
+            <Users size={15} aria-hidden className="shrink-0" /> {t("Organizar por personas: una columna para cada una")}
+          </button>
+        )}
+      </div>
       <button type="button" className="btn-icon -my-1 -mr-1 h-7 w-7 shrink-0" onClick={() => setOpen(false)} aria-label={t("Cerrar")} title={t("Cerrar")}>
         <X size={15} />
       </button>

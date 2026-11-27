@@ -42,6 +42,8 @@ import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit"
 import { boardDragA11y } from "./drag-a11y";
 import { EVERGREEN_DROPPABLE_PREFIX, evergreenLeftPanel } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
+import { PEOPLE_TEMPLATE } from "@/lib/column-assign-core";
+import { setReleaseNav } from "./releaseNav";
 import { duplicatedMessage, useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
 import { applyTaskPatch, LIVE_PATCH_MAX, liveTasksUrl, liveUpdatePlan, PATCH_JITTER_MAX_MS, patchRequestIds, withPatchedTasks } from "./livePatch";
@@ -1007,6 +1009,11 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   /** Tarjetas no archivadas de la columna (sin filtrar, con las fijas): la cifra que se compara con su límite. */
   const columnCardCount = (columnId: string) => (baseItems[columnId]?.length ?? 0) + (evergreenByColumn[columnId]?.length ?? 0);
   const nextReleaseColumn = sortedColumns.find((c) => c.role === "NEXT_RELEASE");
+  // Sin columna «Siguiente salto» ni releases hechas, «Release con selección» y «Releases» del menú no pintan nada.
+  const usesReleases = Boolean(nextReleaseColumn) || Boolean(page.project.hasReleases);
+  useEffect(() => {
+    setReleaseNav(page.project.id, usesReleases);
+  }, [page.project.id, usesReleases]);
   // Sin columna elegida (al abrir el tablero), la primera con tarjetas: la misma en el servidor y en el navegador. La última
   // vista en este proyecto se recupera al montar (ver «Columna visible en móvil»).
   const activeMobileColumn = sortedColumns.find((c) => c.id === mobileColumn)?.id
@@ -2115,7 +2122,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
             </button>
           </div>
         )}
-        {introText && <ProjectIntroNotice description={introText} />}
+        {introText && <ProjectIntroNotice description={introText} byPeople={view !== "list" && page.project.templateKey === PEOPLE_TEMPLATE} />}
         {view === "list" ? <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} /> : dndBoard}
 
         <FloatingCreateButtons
@@ -2134,7 +2141,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
           onMove={moveSelected}
           onArchive={archiveSelected}
           onDelete={deleteSelected}
-          onRelease={() => {
+          onRelease={!usesReleases ? undefined : () => {
             const selected = stores.selection.get();
             const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
             // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar release»).

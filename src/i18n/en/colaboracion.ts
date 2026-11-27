@@ -139,4 +139,6 @@ export const colaboracion: Record<string, string> = {
   "Fallo al avisar a {name} del destinatario rechazado: {error}": "Failed to notify {name} about the rejected recipient: {error}",
   // Mis tareas: línea de resumen con un enlace a cada grupo
   "Grupos de mis tareas": "My task groups",
+  // Ronda 71: avisos
+  "Esa tarea ya no existe.": "That task no longer exists.",
 };

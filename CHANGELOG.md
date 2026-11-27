@@ -2,6 +2,39 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.74.0 — 2026-11-27 09:28
+
+Quien crea un proyecto es miembro, Releases solo donde se usan, columna nueva antes de «Hecho», web de fuera con tope de bytes y miniatura que abre la imagen, CI más rápida, limpieza de código
+
+### Nuevas funcionalidades
+
+- «Organizar por personas» también desde la tarjeta de bienvenida de un proyecto nuevo de «Casa y familia».
+- Web de «Compartir fuera»: pulsar la miniatura de una imagen la abre en otra pestaña (el nombre la sigue descargando).
+
+### Mejoras
+
+- Quien crea un proyecto (también de equipo) o lo importa queda como su miembro.
+- «Releases» en el menú y «Release con selección» solo en proyectos con columna «Siguiente salto» o con alguna release.
+- «Añadir columna» pone la nueva justo antes de la primera columna terminada («Hecho»).
+- Web de fuera: «Cambiar fecha» no deja elegir una fecha anterior al inicio y dice «La fecha no ha cambiado.» si no cambia; si un comentario falla, pide copiar el texto.
+- Web de fuera: tope de 2 GB servidos por enlace y hora, además de las 300 descargas.
+- Release .md y .txt: las imágenes de la descripción no se repiten en «Adjuntos:».
+- «Importar tareas» pregunta antes de cerrar con tareas sin importar.
+- La prueba mensual de restauración solo comprueba el archivo si no hay disco para restaurar entera.
+- Errores de importar un proyecto, y el aviso de cambiar la contraseña, en el idioma de cada persona.
+
+### Correcciones
+
+- Un aviso cuya tarea o proyecto se borró dice «Esa tarea ya no existe.» o «El proyecto ya no existe.» al pulsarlo.
+- Asistente /setup: «Atrás» tras un error al terminar ya no lo borra.
+
+### Cambios técnicos / DB
+
+- Nuevo tipo de aviso SHARE_REVOKED (aún sin usar: la v1.75 avisará a quien generó la web).
+- ColumnShare.generatedByName sale del esquema (la columna se borra en la v1.75).
+- Retirado código sin uso: parseProfileTab, listProjectDocuments/listTrashedDocuments, exports de htmlTableToMarkdown y runBoot.
+- CI: PostgreSQL de pruebas sin fsync y 4 procesos en las pruebas con base.
+
 ## v1.73.1 — 2026-11-27 04:51
 
 Revisión operativa y caza de bugs: Ctrl+Z sin doble recarga, móvil sin zoom, exportar con imágenes de releases, concurrencia y avisos de deshacer con lo hecho desde fuera

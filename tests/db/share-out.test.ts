@@ -167,7 +167,7 @@ describe("compartir fuera: activar y generar", () => {
     expectFail(await setShareExpiry(f.columns.todo, 12), /Caducidad no válida/);
   });
 
-  test("ronda 69: sin tareas no se genera, la página dice quién la comparte y ya no se escribe generatedByName", async () => {
+  test("ronda 69: sin tareas no se genera, la página dice quién la comparte", async () => {
     const { me, f, t1, t2 } = await setup();
     await db.task.updateMany({ where: { id: { in: [t1.id, t2.id] } }, data: { archivedAt: new Date() } });
     expectFail(await generateShareWeb(f.columns.todo), /No hay tareas en esta columna/);
@@ -175,7 +175,6 @@ describe("compartir fuera: activar y generar", () => {
     const token = tokenOf((await generate(f.columns.todo)).url);
     const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
     assert.equal(row.generatedById, me.id);
-    assert.equal(row.generatedByName, null, "el nombre se lee de la cuenta, no se guarda");
     const html = await (await page(token)).text();
     assert.ok(html.includes("Compartida por Marta desde Pizarro"), "el nombre de pila de quien generó la web");
     await db.user.update({ where: { id: me.id }, data: { name: "Lucía Nueva" } });
@@ -323,6 +322,15 @@ describe("compartir fuera: lo que se hace desde fuera", () => {
     assert.equal(noticeOf(await post(token, t1.id, { op: "due", due: "2026-12-03" })), "due");
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: t1.id } })).dueDate?.toISOString().slice(0, 10), "2026-12-03");
     assert.equal(noticeOf(await post(token, t1.id, { op: "due", due: "3/12/2026" })), "invalid");
+    // La misma fecha: «no ha cambiado», sin historial, deshacer ni aviso nuevos.
+    const [events, notices] = [await db.taskEvent.count({ where: { taskId: t1.id } }), await db.notification.count({ where: { taskId: t1.id } })];
+    assert.equal(noticeOf(await post(token, t1.id, { op: "due", due: "2026-12-03" })), "same");
+    assert.deepEqual([await db.taskEvent.count({ where: { taskId: t1.id } }), await db.notification.count({ where: { taskId: t1.id } })], [events, notices]);
+    // Antes de la fecha de inicio: aviso propio y nada cambia.
+    await db.task.update({ where: { id: t1.id }, data: { startDate: new Date("2026-12-01T00:00:00Z") } });
+    assert.equal(noticeOf(await post(token, t1.id, { op: "due", due: "2026-11-20" })), "early");
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: t1.id } })).dueDate?.toISOString().slice(0, 10), "2026-12-03");
+    await db.task.update({ where: { id: t1.id }, data: { startDate: null } });
     const due = await db.notification.findFirstOrThrow({ where: { userId: ana.id, type: "DUE_CHANGED", taskId: t1.id } });
     assert.equal(externalNotice(due.excerpt)?.author, "Por hacer (fuera)");
     assert.equal(noticeOf(await post(token, t1.id, { op: "comment", body: `Hola @[Marta Ruiz](user:${me.id})` })), "comment");
@@ -394,7 +402,7 @@ describe("compartir fuera: lo que se hace desde fuera", () => {
     assert.equal((await file(token, foreign.id)).status, 404);
     assert.equal((await file(token, "no$valido")).status, 404);
     // Ronda 69: la imagen adjunta sale con su miniatura (en línea) y el nombre como descarga.
-    assert.ok(html.includes(`<li class="img"><a href="/x/${token}/a/${img.id}"><img src="/x/${token}/a/${img.id}?inline=thumb"`), "miniatura que enlaza a la descarga normal");
+    assert.ok(html.includes(`<li class="img"><a href="/x/${token}/a/${img.id}?inline=open" target="_blank" rel="noopener noreferrer"><img src="/x/${token}/a/${img.id}?inline=thumb"`), "miniatura que abre la imagen; el nombre sigue siendo la descarga");
     // La miniatura usa su variante (si existe; si no, la normal) y es lo único que se guarda en el navegador.
     const noThumb = await file(token, img.id, "?inline=thumb");
     assert.equal(await noThumb.text(), "img-data", "sin miniatura, la imagen normal");
@@ -405,11 +413,18 @@ describe("compartir fuera: lo que se hace desde fuera", () => {
     assert.equal(thumb.headers.get("cache-control"), "private, max-age=3600");
     assert.equal((await file(token, img.id, "?inline=1")).headers.get("cache-control"), "no-store", "la imagen de la descripción no se guarda");
     assert.equal(await (await file(token, img.id, "?inline=1")).text(), "img-data");
+    // Abrir la imagen desde la miniatura: en línea, sin guardar y contada (Logs como vista).
+    const open = await file(token, img.id, "?inline=open");
+    assert.match(open.headers.get("content-disposition")!, /^inline;/);
+    assert.equal(open.headers.get("cache-control"), "no-store");
+    assert.equal(open.headers.get("content-type"), "image/webp");
+    assert.equal(await open.text(), "img-data");
     // Solo las descargas de verdad quedan en Logs (el PDF dos veces; la miniatura no), firmadas «<columna> (fuera)».
     await flushLogs();
     const logs = await db.appLog.findMany({ where: { projectId: f.project.id, action: "shareOut.download" } });
     const col = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
     assert.deepEqual(logs.map((l) => l.userName), [`${col.name} (fuera)`, `${col.name} (fuera)`]);
+    assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: "shareOut.view" } }), 1);
     expectOk(await archiveTask(t1.id));
     assert.equal((await file(token, own.id)).status, 404);
   });
@@ -555,7 +570,6 @@ describe("compartir fuera: arreglos de la revisión", () => {
     assert.ok(res);
     const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
     assert.equal(row.generatedById, null);
-    assert.equal(row.generatedByName, null, "como en el historial, no queda su nombre");
     assert.equal(noticeOf(await post(token, fixed.id, { op: "done" })), "done");
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixed.id } })).columnId, f.columns.done);
     const spawned = await db.task.findFirst({ where: { recurrenceFromId: fixed.id } });
@@ -658,6 +672,21 @@ describe("compartir fuera: segunda vuelta de la revisión", () => {
     await flushLogs();
     assert.equal((await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } })).lastUsedAt?.getTime(), old.getTime(), "no cuenta como uso");
     assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: { in: ["shareOut.open", "shareOut.download"] } } }), 0);
+  });
+
+  test("tope de bytes por enlace y hora: pasado, 429 en todas las variantes; las descargas también cuentan la vista", async () => {
+    const { f, t1 } = await setup();
+    const img = await db.taskAttachment.create({ data: { taskId: t1.id, originalName: "plano.png", size: 8, isImage: true, mimeType: "image/webp" } });
+    await writeFile(attachmentPath(img.id, "full"), "img-data");
+    await db.task.update({ where: { id: t1.id }, data: { description: `Mira ![plano](/api/attachments/${img.id})` } });
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    assert.equal((await file(token, img.id, "?inline=1")).status, 200);
+    // Gastado casi todo (ya van 8 bytes): queda justo para otra imagen de 8 bytes.
+    const key = `share-out:bytes:${shareKeyOf(token)}`;
+    rateLimit(key, SHARE_LIMITS.bytes.limit, SHARE_LIMITS.bytes.windowMs, SHARE_LIMITS.bytes.limit - 16);
+    assert.equal((await file(token, img.id, "?inline=1")).status, 200, "cabe justo: pasa");
+    for (const q of ["?inline=1", "?inline=thumb", "?inline=open", ""]) assert.equal((await file(token, img.id, q)).status, 429, q || "descarga");
+    assert.equal((await fileHead(token, img.id)).status, 200, "HEAD no cuenta");
   });
 
   test("formulario multipart mal formado: vuelve con «no se ha podido» (sin 500 ni error en Logs)", async () => {

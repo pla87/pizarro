@@ -13,6 +13,7 @@ import { actionThrowResult } from "@/lib/stale-action";
 import { isOfflineMessage } from "@/lib/connection";
 import { parseTasksText, TASK_READ_FAILURE, TASKS_JSON_MAX, TASKS_TEXT_MAX_CHARS } from "@/lib/task-json";
 import { importPreview } from "@/lib/task-json-form";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
@@ -55,6 +56,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
   const t = useT();
   const locale = useLocale();
   const toast = useToast();
+  const confirm = useConfirm();
   const uid = useId();
   const [text, setText] = useState(initialText);
   const [forced, setForced] = useState("");
@@ -102,6 +104,21 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
     if (res.data.tasks[0]) board.revealTask(res.data.tasks[0].id);
   };
 
+  // Con texto o fichero sin importar, cerrar (Escape, clic fuera, X o «Cancelar») pide confirmación; importando, no se cierra.
+  const confirming = useRef(false);
+  const requestClose = async (): Promise<boolean> => {
+    if (busy) return false;
+    if (text.trim()) {
+      if (confirming.current) return false;
+      confirming.current = true;
+      const ok = await confirm({ title: t("Descartar la importación"), message: t("Hay tareas sin importar. ¿Descartarlas?"), confirmLabel: t("Descartar"), danger: true }).catch(() => false);
+      confirming.current = false;
+      if (!ok) return false;
+    }
+    onClose();
+    return true;
+  };
+
   const label = read.tooMany
     ? t("Máximo {n} tareas", { n: TASKS_JSON_MAX })
     : ready.length === 1
@@ -113,13 +130,13 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={requestClose}
       title={t("Importar tareas")}
       size="md"
       placement="top"
       footer={
         <>
-          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button type="button" className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
           <button type="button" className="btn-primary" onClick={() => void submit()} disabled={busy || !ready.length || read.tooMany || read.tooLong || !!read.error} data-import-submit>
             {busy && <Loader2 size={16} className="animate-spin" />} {label}
           </button>

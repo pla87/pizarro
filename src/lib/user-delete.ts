@@ -132,7 +132,7 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
     if (toTeam.length) await tx.project.updateMany({ where: { id: { in: toTeam } }, data: { isPrivate: false, privateOwnerId: null } });
     await tx.taskEvent.updateMany({ where: { userId }, data: { userName: "" } });
     // «Compartir fuera»: quien generó la web no tiene clave ajena; sin la cuenta, ni el id ni su nombre (como en el historial).
-    await tx.columnShare.updateMany({ where: { generatedById: userId }, data: { generatedById: null, generatedByName: null } });
+    await tx.columnShare.updateMany({ where: { generatedById: userId }, data: { generatedById: null } });
     await tx.columnShare.updateMany({ where: { revokedById: userId }, data: { revokedById: null } });
     await tx.user.delete({ where: { id: userId } });
     return { solo, userName: user.name, reportsOff };

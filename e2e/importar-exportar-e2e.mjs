@@ -32,6 +32,14 @@ const boardTitles = async () => (await L.q(`SELECT t.title FROM "Task" t WHERE t
 const taskOf = async (title) => (await L.q(`SELECT t.id, t."blockedById", t."createdById", t."assigneeId", c.name AS col, to_char(t."dueDate",'YYYY-MM-DD') AS due FROM "Task" t JOIN "Column" c ON c.id=t."columnId" WHERE t.title=$1 ORDER BY t."createdAt" DESC LIMIT 1`, [title]))[0];
 const labelNames = async () => (await L.q(`SELECT name FROM "Label" WHERE "projectId"=$1 ORDER BY name`, [p0.id])).map((r) => r.name);
 const importDialog = (page) => page.getByRole("dialog", { name: /Importar tareas|Import tasks/ });
+/** «Cancelar» con texto pegado: desde la v1.74 pregunta «Hay tareas sin importar. ¿Descartarlas?» y se confirma. */
+async function cancelImport(page, label = "") {
+  await importDialog(page).getByRole("button", { name: "Cancelar" }).click();
+  const ask = page.getByRole("dialog", { name: "Descartar la importación" });
+  if (label) L.check(label, await ask.waitFor({ timeout: 5000 }).then(() => true, () => false));
+  await ask.getByRole("button", { name: "Descartar", exact: true }).click();
+  await importDialog(page).waitFor({ state: "detached" });
+}
 
 async function cleanLabels() {
   await L.q(`DELETE FROM "Label" WHERE "projectId"=$1`, [p0.id]);
@@ -108,7 +116,7 @@ if (only.includes("importar")) {
     for (const type of ["dragenter", "dragover", "drop"]) document.body.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
   });
   await L.checkEventually("ARRASTRAR: el .txt soltado encima se carga (2 tareas)", async () => (await importDialog(page).innerText()).includes("2 tareas detectadas"));
-  await importDialog(page).getByRole("button", { name: "Cancelar" }).click();
+  await cancelImport(page, "CANCELAR: con texto pegado pregunta antes de descartar");
 
   // «Desde el portapapeles» y Ctrl+V en el tablero.
   const exported = JSON.stringify({ format: "pizarro.tasks", version: 1, project: "Otro", projectId: "otro", tasks: [{ format: "pizarro.task", title: "Del portapapeles" }] });
@@ -117,13 +125,11 @@ if (only.includes("importar")) {
   await importDialog(page).waitFor();
   await importDialog(page).getByRole("button", { name: "Desde el portapapeles" }).click();
   await L.checkEventually("PORTAPAPELES: el botón carga lo que hay en el portapapeles", async () => (await importDialog(page).locator("textarea").inputValue()) === exported);
-  await importDialog(page).getByRole("button", { name: "Cancelar" }).click();
-  await importDialog(page).waitFor({ state: "detached" });
+  await cancelImport(page);
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
   await page.keyboard.press("Control+v");
   await L.checkEventually("CTRL+V: en el tablero, un JSON de tareas exacto abre «Importar tareas» con el texto", async () => (await importDialog(page).count()) === 1 && (await importDialog(page).locator("textarea").inputValue()) === exported);
-  await importDialog(page).getByRole("button", { name: "Cancelar" }).click();
-  await importDialog(page).waitFor({ state: "detached" });
+  await cancelImport(page);
   for (const [name, t] of [["texto con la tarea dentro", `Mira: ${exported}`], ["un texto cualquiera", "hola"], ["una tarea sin marcador", '{"title":"x"}']]) {
     await setClip(page, t);
     await page.keyboard.press("Control+v");
@@ -643,7 +649,7 @@ if (only.includes("oscuro")) {
   const listBg = await dlg.locator("[data-import-preview]").evaluate((el) => getComputedStyle(el).borderTopColor);
   L.check("OSCURO: el cuadro de texto no es blanco", bg !== "rgb(255, 255, 255)", bg);
   L.check("OSCURO: la lista de la vista previa con borde oscuro", listBg !== "rgb(226, 232, 240)", listBg);
-  await dlg.getByRole("button", { name: "Cancelar" }).click();
+  await cancelImport(page);
   await U.openTask(page, "Noche");
   const color = await U.dialog(page).getByRole("button", { name: "Importar tarea", exact: true }).evaluate((el) => getComputedStyle(el).color);
   L.check("OSCURO: los botones de la tarea no son negros sobre oscuro", color !== "rgb(15, 23, 42)" && color !== "rgb(0, 0, 0)", color);

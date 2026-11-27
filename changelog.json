@@ -1,6 +1,69 @@
 {
   "versions": [
     {
+      "version": "1.74.0",
+      "date": "2026-11-27",
+      "releasedAt": "2026-11-27T09:28:20+01:00",
+      "summary": "Quien crea un proyecto es miembro, Releases solo donde se usan, columna nueva antes de «Hecho», web de fuera con tope de bytes y miniatura que abre la imagen, CI más rápida, limpieza de código",
+      "changes": {
+        "nuevas": [
+          "«Organizar por personas» también desde la tarjeta de bienvenida de un proyecto nuevo de «Casa y familia».",
+          "Web de «Compartir fuera»: pulsar la miniatura de una imagen la abre en otra pestaña (el nombre la sigue descargando)."
+        ],
+        "mejoras": [
+          "Quien crea un proyecto (también de equipo) o lo importa queda como su miembro.",
+          "«Releases» en el menú y «Release con selección» solo en proyectos con columna «Siguiente salto» o con alguna release.",
+          "«Añadir columna» pone la nueva justo antes de la primera columna terminada («Hecho»).",
+          "Web de fuera: «Cambiar fecha» no deja elegir una fecha anterior al inicio y dice «La fecha no ha cambiado.» si no cambia; si un comentario falla, pide copiar el texto.",
+          "Web de fuera: tope de 2 GB servidos por enlace y hora, además de las 300 descargas.",
+          "Release .md y .txt: las imágenes de la descripción no se repiten en «Adjuntos:».",
+          "«Importar tareas» pregunta antes de cerrar con tareas sin importar.",
+          "La prueba mensual de restauración solo comprueba el archivo si no hay disco para restaurar entera.",
+          "Errores de importar un proyecto, y el aviso de cambiar la contraseña, en el idioma de cada persona."
+        ],
+        "correcciones": [
+          "Un aviso cuya tarea o proyecto se borró dice «Esa tarea ya no existe.» o «El proyecto ya no existe.» al pulsarlo.",
+          "Asistente /setup: «Atrás» tras un error al terminar ya no lo borra."
+        ],
+        "tecnicos": [
+          "Nuevo tipo de aviso SHARE_REVOKED (aún sin usar: la v1.75 avisará a quien generó la web).",
+          "ColumnShare.generatedByName sale del esquema (la columna se borra en la v1.75).",
+          "Retirado código sin uso: parseProfileTab, listProjectDocuments/listTrashedDocuments, exports de htmlTableToMarkdown y runBoot.",
+          "CI: PostgreSQL de pruebas sin fsync y 4 procesos en las pruebas con base."
+        ]
+      },
+      "en": {
+        "summary": "Project creators become members, Releases only where used, new columns before “Done”, byte cap and image viewing on the outside web, faster CI, code cleanup",
+        "changes": {
+          "nuevas": [
+            "“Organize by people” also from the welcome card of a new “Home and family” project.",
+            "“Share outside” web: clicking an image thumbnail opens it in another tab (the file name still downloads it)."
+          ],
+          "mejoras": [
+            "Whoever creates a project (team ones too) or imports it becomes its member.",
+            "“Releases” in the menu and “Release with selection” only in projects with a “Next release” column or some release.",
+            "“Add column” places the new one right before the first done column (“Done”).",
+            "Outside web: “Change date” doesn't allow a date before the start date and says “The date hasn't changed.” if it doesn't change; if a comment fails, it asks you to copy your text.",
+            "Outside web: 2 GB served per link and hour, on top of the 300 downloads.",
+            "Release .md and .txt: images in the description are not repeated under “Attachments:”.",
+            "“Import tasks” asks before closing with tasks not imported.",
+            "The monthly restore test only checks the archive if there's no disk room for a full restore.",
+            "Project import errors, and the change-password notice, in each person's language."
+          ],
+          "correcciones": [
+            "A notification whose task or project was deleted says “That task no longer exists.” or “The project no longer exists.” when clicked.",
+            "/setup wizard: “Back” after an error when finishing no longer clears it."
+          ],
+          "tecnicos": [
+            "New SHARE_REVOKED notification type (not used yet: v1.75 will notify whoever generated the web).",
+            "ColumnShare.generatedByName leaves the schema (the column is dropped in v1.75).",
+            "Removed unused code: parseProfileTab, listProjectDocuments/listTrashedDocuments, htmlTableToMarkdown and runBoot exports.",
+            "CI: test PostgreSQL without fsync and 4 processes for the database tests."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.73.1",
       "date": "2026-11-27",
       "releasedAt": "2026-11-27T04:51:57+01:00",

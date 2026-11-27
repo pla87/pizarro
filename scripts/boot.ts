@@ -49,17 +49,14 @@ async function main() {
 
 /**
  * Ejecuta las tareas de arranque y cierra su conexión. Lanza si fallan (base inaccesible, migraciones sin aplicar).
- * src/lib/db.ts deja el cliente en globalThis (una sola copia por proceso); aquí se quita al terminar: si no, cualquier
- * código cargado después en el mismo proceso heredaría este cliente ya desconectado (`npm start` ya no lo hace: lanza boot
- * en un proceso hijo, pero se conserva por si se vuelve a importar).
+ * Siempre corre en un proceso propio (`node dist/boot.mjs`: el contenedor y `npm start` lo lanzan aparte), así que no hace
+ * falta limpiar `globalThis.prisma`: el proceso termina al acabar.
  */
-export async function runBoot(): Promise<void> {
+async function runBoot(): Promise<void> {
   try {
     await main();
   } finally {
     await db.$disconnect();
-    const g = globalThis as unknown as { prisma?: unknown };
-    if (g.prisma === db) delete g.prisma;
   }
 }
 

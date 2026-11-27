@@ -19,6 +19,8 @@ interface SharePageTask {
   title: string;
   description: string;
   dueDate: string | null;
+  /** Fecha de inicio: la de «Cambiar fecha» no puede ser anterior. */
+  startDate?: string | null;
   /** Responsable por su nombre de pila o nombre visible (nunca su email). */
   assignee: string | null;
   done: boolean;
@@ -42,6 +44,8 @@ export interface SharePageData {
   notice: ShareNotice | null;
   /** Tarea a la que se refiere el aviso (`?t=`, solo si sigue en la lista): sale en su tarjeta, no arriba del todo. */
   noticeTaskId?: string | null;
+  /** El aviso es de un comentario (`?o=comment`): si es de error, pide copiar el texto antes de volver a intentarlo. */
+  noticeFromComment?: boolean;
   /** Nombre de pila de quien generó la web (de su cuenta); null si ya no existe. */
   sharedBy?: string | null;
   /** Región BCP 47 de las fechas (es-ES, en-GB…). */
@@ -54,10 +58,11 @@ export interface SharePageData {
 
 /**
  * Dirección de un adjunto de la tarea servido por la página (descarga; `inline` para las imágenes de la descripción;
- * `"thumb"`, la miniatura de un adjunto, que se ve en línea y no cuenta como descarga).
+ * `"thumb"`, la miniatura de un adjunto, que se ve en línea y no cuenta como descarga; `"open"`, el original de una
+ * imagen para verlo en otra pestaña, que sí cuenta como descarga).
  */
-export const shareAttachmentPath = (token: string, attachmentId: string, inline: boolean | "thumb" = false): string =>
-  `/x/${encodeURIComponent(token)}/a/${encodeURIComponent(attachmentId)}${inline === "thumb" ? "?inline=thumb" : inline ? "?inline=1" : ""}`;
+export const shareAttachmentPath = (token: string, attachmentId: string, inline: boolean | "thumb" | "open" = false): string =>
+  `/x/${encodeURIComponent(token)}/a/${encodeURIComponent(attachmentId)}${inline === "thumb" ? "?inline=thumb" : inline === "open" ? "?inline=open" : inline ? "?inline=1" : ""}`;
 
 const ATTACHMENT_SRC = /^\/api\/attachments\/([A-Za-z0-9_-]{1,40})(?:\?[^#\s]*)?$/;
 
@@ -128,8 +133,18 @@ function documentHtml(lang: string, title: string, body: string): string {
   return `<!doctype html><html lang="${escapeHtml(lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><title>${escapeHtml(title)}</title><style>${CSS}</style></head><body><main>${body}</main></body></html>`;
 }
 
-function noticeText(n: ShareNotice, t: T): { text: string; error: boolean } {
+function noticeText(n: ShareNotice, t: T, opts: { startDate: string | null; locale: string; fromComment: boolean }): { text: string; error: boolean } {
+  const r = noticeBase(n, t, opts);
+  // Un comentario que no se ha guardado: sin JavaScript, el texto escrito se pierde al volver a la página.
+  return r.error && opts.fromComment ? { ...r, text: `${r.text} ${t("Copia tu texto antes de volver a intentarlo.")}` } : r;
+}
+
+function noticeBase(n: ShareNotice, t: T, opts: { startDate: string | null; locale: string }): { text: string; error: boolean } {
   switch (n) {
+    case "early": return opts.startDate
+      ? { text: t("La fecha no puede ser anterior al {date}.", { date: day(opts.startDate, opts.locale) }), error: true }
+      : { text: t("No se ha podido guardar: revisa los datos."), error: true };
+    case "same": return { text: t("La fecha no ha cambiado."), error: false };
     case "done": return { text: t("Tarea marcada como hecha."), error: false };
     case "due": return { text: t("Fecha cambiada."), error: false };
     case "comment": return { text: t("Comentario publicado."), error: false };
@@ -156,7 +171,8 @@ export function sharePageHtml(d: SharePageData, t: T): string {
   const md = (text: string, attachments: ReadonlySet<string>) => shareMarkdownHtml(text, { token: d.token, attachments, appOrigin: d.appOrigin });
   const when = (iso: string) => new Date(iso).toLocaleString(d.locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: d.timeZone });
   const action = (taskId: string) => `/x/${encodeURIComponent(d.token)}/t/${encodeURIComponent(taskId)}`;
-  const notice = d.notice ? noticeText(d.notice, t) : null;
+  const noticeStart = d.tasks.find((x) => x.id === d.noticeTaskId)?.startDate ?? null;
+  const notice = d.notice ? noticeText(d.notice, t, { startDate: noticeStart, locale: d.locale, fromComment: d.noticeFromComment === true }) : null;
   const tasks = d.tasks.map((task) => {
     const ids = new Set(task.attachments.map((a) => a.id));
     const title = escapeHtml(mentionsToPlain(task.title));
@@ -177,10 +193,11 @@ export function sharePageHtml(d: SharePageData, t: T): string {
       parts.push(`<h3>${escapeHtml(t("Subtareas"))}</h3><ul class="sub">${task.subtasks.map((s) => `<li>${s.done ? "☑" : "☐"} ${escapeHtml(mentionsToPlain(s.title))}</li>`).join("")}</ul>`);
     }
     if (task.attachments.length) {
-      // Las imágenes, con su miniatura (servida en línea, que no cuenta como descarga); tanto la miniatura como el nombre enlazan a la descarga.
+      // Las imágenes, con su miniatura (servida en línea, que no cuenta como descarga): la miniatura abre la imagen en otra
+      // pestaña (cuenta como descarga) y el nombre sigue siendo la descarga.
       const file = (a: SharePageTask["attachments"][number]) => `<a href="${escapeHtml(shareAttachmentPath(d.token, a.id))}">${escapeHtml(a.name)}</a> <span class="muted">(${escapeHtml(formatSize(a.size, d.locale))})</span>`;
       const item = (a: SharePageTask["attachments"][number]) => a.isImage
-        ? `<li class="img"><a href="${escapeHtml(shareAttachmentPath(d.token, a.id))}"><img src="${escapeHtml(shareAttachmentPath(d.token, a.id, "thumb"))}" alt="${escapeHtml(a.name)}" loading="lazy"></a>${file(a)}</li>`
+        ? `<li class="img"><a href="${escapeHtml(shareAttachmentPath(d.token, a.id, "open"))}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(shareAttachmentPath(d.token, a.id, "thumb"))}" alt="${escapeHtml(a.name)}" loading="lazy"></a>${file(a)}</li>`
         : `<li>${file(a)}</li>`;
       parts.push(`<h3>${escapeHtml(t("Adjuntos"))}</h3><ul class="files">${task.attachments.map(item).join("")}</ul>`);
     }
@@ -188,7 +205,7 @@ export function sharePageHtml(d: SharePageData, t: T): string {
     if (d.canMarkDone && !task.done) {
       forms.push(`<form method="post" action="${action(task.id)}"><input type="hidden" name="op" value="done"><button type="submit"${of}>${escapeHtml(t("Marcar como hecha"))}</button></form>`);
     }
-    forms.push(`<form method="post" action="${action(task.id)}" class="row"><input type="hidden" name="op" value="due"><label class="row">${escapeHtml(t("Fecha"))} <input type="date" name="due" value="${escapeHtml(task.dueDate ?? "")}"></label><button type="submit" class="secondary"${of}>${escapeHtml(t("Cambiar fecha"))}</button></form>`);
+    forms.push(`<form method="post" action="${action(task.id)}" class="row"><input type="hidden" name="op" value="due"><label class="row">${escapeHtml(t("Fecha"))} <input type="date" name="due" value="${escapeHtml(task.dueDate ?? "")}"${task.startDate ? ` min="${escapeHtml(task.startDate)}"` : ""}></label><button type="submit" class="secondary"${of}>${escapeHtml(t("Cambiar fecha"))}</button></form>`);
     parts.push(forms.join(""));
     parts.push(`<h3>${escapeHtml(t("Comentarios"))}</h3>`);
     if (!task.comments.length) parts.push(`<p class="muted">${escapeHtml(t("Aún no hay comentarios."))}</p>`);

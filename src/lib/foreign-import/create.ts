@@ -171,9 +171,9 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
           isPrivate: opts.isPrivate, privateOwnerId: opts.isPrivate ? user.id : null, taskFields: fields,
         },
       });
-      if (opts.isPrivate) await tx.projectMember.create({ data: { projectId, userId: user.id } });
-      else await tx.adminProjectPick.create({ data: { projectId, userId: user.id } });
-      if (memberIds.size) await tx.projectMember.createMany({ data: [...memberIds].map((userId) => ({ projectId, userId })) });
+      // Quien importa es miembro (como al crear uno); en uno de equipo, además, proyecto de trabajo suyo.
+      if (!opts.isPrivate) await tx.adminProjectPick.create({ data: { projectId, userId: user.id } });
+      await tx.projectMember.createMany({ data: [...new Set([user.id, ...memberIds])].map((userId) => ({ projectId, userId })) });
       await tx.column.createMany({
         data: columnDefs.map((c, i) => ({ id: columnIds[i]!, projectId, name: c.name, position: (i + 1) * POSITION_STEP, role: c.role, isDone: c.isDone })),
       });

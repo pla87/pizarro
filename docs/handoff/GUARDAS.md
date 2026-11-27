@@ -92,6 +92,15 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - (Ronda 70) Tablero en vivo: `uncoveredChanges` (`remoteChange.ts`) descarta los avisos anteriores a la última recarga
   completa (`refreshAt` en `Board.tsx`, `performance.now()`); sin eso, Ctrl+Z recargaba dos veces (su aviso `undo.*` llega
   sin `cid`, como uno ajeno). Cada aviso lleva `at` al llegar; sin `at` cuenta como no cubierto.
+- (Ronda 71) Topes por enlace: además de 300 descargas o vistas por hora, 2 GB servidos por hora (`SHARE_LIMITS.bytes`,
+  `shareBytesAllowed`, clave `share-out:bytes:`), contando todas las variantes (descarga, `?inline=1`, `thumb` y `open`)
+  con el tamaño real servido; HEAD no cuenta y lo que no cabe se devuelve al contador. `?inline=open` (la miniatura que
+  abre la imagen) cuenta como una descarga y va a Logs como `shareOut.view`. «Cambiar fecha» sin cambio devuelve `same`
+  (sin historial, deshacer ni aviso); antes del inicio, `early`. `o=comment` en la vuelta marca el aviso de un comentario.
+- (Ronda 71) «Releases» del menú y «Release con selección»: solo con una columna NEXT_RELEASE o alguna release
+  (`releaseNav.ts`; el tablero lo apunta con sus columnas en vivo y el layout da el dato inicial; sin dato, se enseña).
+- (Ronda 71) «Añadir columna» va antes de la primera columna terminada (`personColumnSlots`, como «Organizar por
+  personas»); devuelve `moved` y el deshacer devuelve esas posiciones. Sin columna terminada, al final sin renumerar.
 
 ## Navegador e interfaz
 
@@ -186,6 +195,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   medias (`migrationsUpToDate`). Ante cualquier duda (pendiente, fallida, otro checksum, tabla ausente, error al leer,
   `?schema=` distinto de `public`) se lanza Prisma como antes. Si Prisma cambia cómo calcula el checksum, lo detecta
   `tests/db/start-migrate.test.ts`.
+- (Ronda 71) Quitar una columna en desuso son dos versiones aunque ya no se use: primero sale del esquema (el cliente nuevo
+  deja de leerla en las consultas sin `select`), y el `DROP COLUMN` va en la versión siguiente. La v1.73 aún lee
+  `ColumnShare.generatedByName` (consultas sin `select` en `actions/share-out.ts`) y la vacía en `user-delete.ts`: la v1.74
+  la quita del esquema y la v1.75 la borra. Lo mismo con un valor de enum: `SHARE_REVOKED` existe desde la v1.74 y nada lo
+  escribe hasta la v1.75.
 
 ## Base de datos
 
@@ -403,6 +417,9 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Las copias de seguridad cifradas suben a un almacenamiento S3 compatible configurado por el propietario.
 - (Ronda 70) `runJob` guarda `lastStartedAt` anterior cuando una tarea con `everyMs` falla, para que el reintento no espere
   su periodo (se reintenta en la pasada siguiente); Administración enseña `lastFinishedAt` si falló (`BackupsAdmin.tsx`).
+- (Ronda 71) Prueba de restauración mensual: antes de crear la base temporal, `roomForTemporaryDatabase` pide el tamaño de
+  la base ×1,2 libre en el disco de las copias; si no cabe, modo «verify» con `limit: "disk"`. Si la medida falla, restaura
+  como antes.
 
 ## Plantillas y tipos
 
@@ -468,6 +485,9 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   ruta knip no lo ve: márcalo con `@public` en su comentario. Antes de quitar un `export`, busca el nombre en `src`,
   `tests`, `scripts` y `e2e`. Los nombres de las pruebas van por tema (`tests/db/comment-notices.test.ts`, no
   `review-fixes-…`): una prueba nueva va al fichero del tema que prueba.
+- (Ronda 71) En GitHub, el PostgreSQL de servicio del job de pruebas con base va con `fsync`, `synchronous_commit` y
+  `full_page_writes` en off (bases desechables) y `TEST_DB_JOBS=4`, igual en `ci.yml` y `release.yml`
+  (`tests/release-pipeline.test.ts`). Nunca en una base de verdad.
 
 ## e2e
 

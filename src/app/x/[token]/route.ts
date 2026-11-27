@@ -48,6 +48,6 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
   }
   const params = new URL(req.url).searchParams;
   const m = params.get("m");
-  const { data, t: pageT } = await loadSharePage(share, token, isShareNotice(m) ? m : null, params.get("t"));
+  const { data, t: pageT } = await loadSharePage(share, token, isShareNotice(m) ? m : null, params.get("t"), params.get("o") === "comment");
   return html(sharePageHtml(data, pageT), 200);
 }

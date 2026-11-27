@@ -167,7 +167,8 @@ if (only.includes("notice")) {
   await p.waitForURL(/\/p\/r51c_priv$/, { timeout: 15000 });
   await L.eqEventually("NOTICE-ES: el selector muestra el proyecto", async () => (await sidebarSwitcher(p).innerText()).trim(), "R51 Huerto");
   L.check("NOTICE-ES: …marcado «No está en tus proyectos»", await p.getByTestId("outside-list-notice").first().isVisible());
-  for (const nav of ["Tablero", "Releases", "Documentación", "Ajustes del proyecto"]) {
+  // Sin «Releases»: el proyecto no tiene columna «Siguiente salto» ni releases, y desde la v1.74 el menú no la enseña.
+  for (const nav of ["Tablero", "Documentación", "Ajustes del proyecto"]) {
     L.check(`NOTICE-ES: navegación «${nav}»`, await p.locator("aside").first().getByRole("link", { name: nav, exact: true }).isVisible());
   }
   L.eq("NOTICE-ES: el título del tablero es el proyecto (no «Pizarro»)", (await p.locator("main [data-project-name]").first().innerText().catch(() => "")).trim(), "R51 Huerto");

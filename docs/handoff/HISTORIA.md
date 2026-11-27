@@ -14,6 +14,19 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 71 (ya aplicadas, v1.74.0):** respuestas del propietario a las preguntas 1-27 de la v1.73.1.
+1: quien crea un proyecto es miembro (opción B, también en uno de equipo y al importar; los de antes no cambian). 2: pidió
+las opciones (a-f) y sigue sin decidir (no se hace ninguna). Para el resto, «sigue tu recomendación»: SÍ a 3 (Organizar por
+personas en la bienvenida de «Casa y familia»), 4 (Releases y «Release con selección» solo con columna «Siguiente salto» o
+alguna release), 7a-d (retirados `parseProfileTab`, `listProjectDocuments`/`listTrashedDocuments`, el `export` de
+`htmlTableToMarkdown` y de `runBoot` y la limpieza de `globalThis.prisma`; 7e NO, `/x/` sigue en robots), 10 (valor
+`SHARE_REVOKED`, primer paso; la v1.75 lo escribe), 11 (`generatedByName` fuera del esquema; el DROP COLUMN pasa a la v1.75
+porque la v1.73 aún la vacía al borrar cuentas y la lee en consultas sin `select`), 13 (2 GB por enlace y hora), 15 (CI con
+`fsync=off` y 4 procesos), 16 (prueba de restauración en «verify» sin disco), 17 (columna nueva antes de «Hecho»), 18 (web de
+fuera: fecha mínima, «La fecha no ha cambiado.», «Copia tu texto…», la miniatura abre la imagen y cuenta como descarga),
+19, 20, 21, 22 y 25. NO a 6, 12, 14, 23, 24, 26 y 27. 5 y 9 quedan para rondas propias; 8 sigue pendiente (cuesta un
+proyecto de Railway).
+
 **Decisiones de la ronda 70 (ya aplicadas, v1.73.1):** encargo del propietario: mejoras operativas (experiencia de uso sin complicar la web, eficiencia, velocidad, seguridad, abaratar servidor sin bajar la calidad) y caza de bugs como cliente, editor, programador y atacante, hasta 10 vueltas o hasta que no saliera nada; lo evidente se arregla, lo opcional se pregunta y lo que se retira se pregunta antes de borrar. Criterio de parada: una vuelta sin hallazgos verificados de gravedad media o alta (se paró en la 5.ª, una pasada en Claude in Chrome en local sin hallazgos nuevos, para no gastar IA de más). Seguridad: nada explotable de gravedad alta. Hecho: «Varias tareas» pregunta al cerrar con texto; la web de fuera no publica el comentario repetido en 30 s (con el reloj de la app); caducidad de «Compartir fuera» sin clics repetidos; «Nueva tarea» respeta el prefijo escrito a mano; «Columna:» en Mis tareas; radios de visibilidad con grupo; imagen pegada sin espacios en el borde; Dockerfile sin copiar `static`/`public` dos veces; exportar/importar con las imágenes de las releases y tipos repetidos como «Nombre (2)»; tareas diarias que fallan se reintentan y Administración dice cuándo fallaron; restauración documentada con el rol de la app; Ctrl+Z con una sola recarga y avisos de deshacer con lo hecho desde fuera (cambios y comentarios); «Mover a…» sin las archivadas; etiquetas del detalle por cambio; «Aplicar plantilla» sin interbloqueo; móvil sin zoom de iOS (16 px) y web de fuera sin desbordes; baja de emails en el idioma de la persona; textos en inglés. **Descartado:** usar la caché de acceso en el canal en vivo (una vía que no la vaciase dejaría ver cambios hasta 5 min; se queda la consulta directa al abrir el canal). **Límite conocido:** la ventana de 30 s del comentario repetido usa el reloj de la app porque Prisma pone `createdAt` en la app; dos personas distintas que escriban lo mismo en 30 s cuentan como una. Opcionales y retiradas pendientes del «sí» del propietario: `docs/HANDOFF.md` §6.
 
 **Decisiones de la ronda 69 (ya aplicadas):** el propietario dijo «adelante» a la propuesta de `docs/handoff/CHROME-R69.md`

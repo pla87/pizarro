@@ -186,6 +186,25 @@ describe("copias completas", () => {
     await assert.rejects(restoreBackup({ databaseUrl: await newDatabase(), source: parseSource(dump, { localDir: "/nada" }), key, migrationsDir: fewer }), /más nueva/);
   });
 
+  test("ronda 71: sin disco para la base temporal, la prueba mensual verifica el archivo y lo dice", async () => {
+    const saved = process.env.DISK_MIN_FREE_MB;
+    // Un margen imposible de cumplir: assertDiskRoom da el volumen por lleno.
+    process.env.DISK_MIN_FREE_MB = "999999999";
+    try {
+      const run = await runRestoreTest();
+      assert.equal(run.ok, true, run.error);
+      assert.equal(run.mode, "verify");
+      assert.equal(run.limit, "disk");
+    } finally {
+      if (saved === undefined) delete process.env.DISK_MIN_FREE_MB;
+      else process.env.DISK_MIN_FREE_MB = saved;
+    }
+    const left = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM pg_database WHERE datname LIKE 'pizarro_restoretest_%'`);
+    assert.equal(left[0]!.n, 0);
+    // Con disco de sobra vuelve a restaurar de verdad.
+    assert.equal((await runRestoreTest()).mode, "database");
+  });
+
   test("prueba de restauración mensual: restaura de verdad en una base temporal y comprueba los ficheros", async () => {
     const run = await runRestoreTest();
     assert.equal(run.ok, true, run.error);

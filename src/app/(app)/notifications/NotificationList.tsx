@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Bell, CalendarClock, Check, CheckCheck, FolderInput, Mail, MailX, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
+import { AtSign, Bell, CalendarClock, Check, CheckCheck, FolderInput, Link2Off, Mail, MailX, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -10,7 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { bucketAnchor } from "@/lib/my-tasks";
-import { assignedBatchCount, noticeActorName, notificationBody, notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "@/lib/notification-text";
+import { assignedBatchCount, noticeActorName, notificationBody, notificationHeadline, isProjectNotice, projectNoticeActor, projectNoticePath, quotesWriting, type NotificationKind } from "@/lib/notification-text";
 import { announceUnreadCount, latestOnly, restoreUnread } from "@/lib/unread-core";
 import { useToast } from "@/components/ui/Toast";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
@@ -40,6 +40,7 @@ const ICONS: Record<NotificationKind, typeof AtSign> = {
   WAITING: Hourglass,
   PROJECT_TO_TEAM: FolderInput,
   REPORT_UNSUBSCRIBED: MailX,
+  SHARE_REVOKED: Link2Off,
 };
 
 /**
@@ -159,6 +160,9 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
     if (!item.read) markRead(item);
     if (item.task) router.push(`/p/${item.task.projectId}?task=${item.task.id}`);
     else if (item.project) router.push(projectNoticePath(item.type, item.project.id));
+    // Su tarea (o su proyecto, en los avisos de proyecto) se borró: no hay a dónde ir, y sin decirlo parece que el botón no
+    // hace nada.
+    else toast(isProjectNotice(item.type) ? t("El proyecto ya no existe.") : t("Esa tarea ya no existe."), "info");
   };
 
   return (
@@ -223,7 +227,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                       {n.project
                         // Aviso de proyecto: la cuenta borrada (o quien se dio de baja del informe) va en el extracto y el
                         // proyecto en lugar de la tarea.
-                        ? notificationHeadline(n.type, t, { actor: n.excerpt || t("Usuario eliminado"), task: t("«{title}»", { title: n.project.name }) })
+                        ? notificationHeadline(n.type, t, { actor: projectNoticeActor(n.type, n.excerpt) || t("Usuario eliminado"), task: t("«{title}»", { title: n.project.name }), excerpt: n.excerpt })
                         : notificationHeadline(n.type, t, { actor: noticeActorName(n.actor?.name, n.excerpt, t("Alguien")), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada"), excerpt: n.excerpt })}
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
                     </p>

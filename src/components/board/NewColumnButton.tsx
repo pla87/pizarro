@@ -28,6 +28,9 @@ function revealColumn(columnId: string): void {
   requestAnimationFrame(go);
 }
 
+/** Evento con el que la tarjeta de bienvenida pide abrir «Organizar por personas» (lo atiende el botón visible). */
+export const OPEN_PEOPLE_COLUMNS_EVENT = "pizarro:people-columns";
+
 /**
  * Añadir columna. En escritorio: una columna estrecha y discontinua al final del tablero, con el «+» y el texto en vertical.
  * En móvil: botón redondo al final de las pestañas de columnas. En proyectos de «Casa y familia», el diálogo ofrece además
@@ -82,6 +85,18 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
     setByPeople(false);
   };
 
+  // La tarjeta de bienvenida abre este mismo flujo. Hay dos botones (escritorio y móvil): responde el que se ve.
+  const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const onOpen = () => {
+      if (!trigger.current || trigger.current.offsetParent === null) return;
+      setByPeople(true);
+      setOpen(true);
+    };
+    window.addEventListener(OPEN_PEOPLE_COLUMNS_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_PEOPLE_COLUMNS_EVENT, onOpen);
+  }, []);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -89,9 +104,12 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
     const res = await track(createColumn(project.id, name));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
-    setColumns((cols) => [...cols, res.data]);
+    // Va antes de «Hecho» (el servidor corre las de detrás: `moved`); el tablero las ordena por posición.
+    const { moved, ...column } = res.data;
+    const shifted = new Map(moved.map((m) => [m.id, m.position]));
+    setColumns((cols) => [...cols.map((c) => (shifted.has(c.id) ? { ...c, position: shifted.get(c.id)! } : c)), column]);
     setName("");
-    created.current = res.data.id;
+    created.current = column.id;
     close();
   };
 
@@ -124,6 +142,7 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
     <>
       {variant === "desktop" ? (
         <button
+          ref={trigger}
           onClick={() => setOpen(true)}
           className="group flex w-10 shrink-0 flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-300 pt-2 text-slate-600 hover:border-brand-500 hover:text-brand-700 max-md:hidden dark:border-slate-700 dark:text-slate-300 dark:hover:text-brand-300"
           aria-label={t("Añadir columna")}
@@ -137,6 +156,7 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
         </button>
       ) : (
         <button
+          ref={trigger}
           onClick={() => setOpen(true)}
           className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full focus-visible:outline-offset-[-3px] bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
           aria-label={t("Añadir columna")}

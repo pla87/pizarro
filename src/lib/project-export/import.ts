@@ -580,10 +580,9 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
             templateKey: knownTemplateKey(data.project.templateKey),
           },
         });
-        // Quien importa: miembro si es privado, o proyecto de trabajo suyo si es de equipo (como al crear uno).
-        if (opts.isPrivate) await tx.projectMember.create({ data: { projectId, userId: user.id } });
-        else await tx.adminProjectPick.create({ data: { projectId, userId: user.id } });
-        if (memberIds.length) await tx.projectMember.createMany({ data: memberIds.map((userId) => ({ projectId, userId })) });
+        // Quien importa es miembro (como al crear uno); en uno de equipo, además, proyecto de trabajo suyo.
+        if (!opts.isPrivate) await tx.adminProjectPick.create({ data: { projectId, userId: user.id } });
+        await tx.projectMember.createMany({ data: [...new Set([user.id, ...memberIds])].map((userId) => ({ projectId, userId })) });
         if (data.reportSchedule) await tx.reportSchedule.create({ data: { projectId, recipient: user.email, createdById: user.id, ...data.reportSchedule } });
         if (data.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: data.releaseTemplates.map((r, i) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, projectId, createdAt: r.createdAt ? date(r.createdAt) : new Date(importedAt + i) })) });
 
