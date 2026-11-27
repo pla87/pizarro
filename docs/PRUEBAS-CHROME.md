@@ -59,8 +59,11 @@ Estado tras la ronda 70 (v1.73.1):
   usuario de la v1.71.0); lo que salió entró en la v1.72.0.
 - Ronda 68: en la nube, sin Claude in Chrome; no se pasó ninguno.
 - Tras la ronda 68 (sesión local, 25-26 nov) se pasaron los prompts 1, 2 y 3 sobre la v1.72.0; el informe completo
-  está en `docs/handoff/CHROME-R69.md` (anexo de historia: ya no hay que leerlo para empezar). Lo que falló o confundía
-  entró en la v1.73.0 (ronda 69).
+  se resumió en `docs/handoff/HISTORIA.md` (ronda 69; el anexo con el informe entero se retiró en la ronda 74 y sigue en
+  el historial de git). Lo que falló o confundía entró en la v1.73.0 (ronda 69). Quedaron para el propietario, a mano:
+  la web de «Compartir fuera» en una ventana privada y en el móvil; «Esta semana» vacía con la ventana muy ancha; dos
+  avisos con «Deshacer» seguidos (el primero se apaga; pasar el ratón y Tab+Intro sobre el segundo); y pegar una imagen
+  de verdad con Ctrl+V en una descripción.
 - Lo aprendido en esa sesión: los avisos de mover tarjetas **no llevan «Deshacer» por diseño** (solo los de asignación
   lo llevan; para lo demás está la flecha ↶ y Ctrl/Cmd+Z), y en «Casa y familia» **todos los tipos tienen plantilla** de
   descripción: para probar el cambio de tipo que quita la plantilla hace falta un proyecto con un tipo sin ella.
