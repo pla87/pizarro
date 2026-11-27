@@ -1,6 +1,43 @@
 {
   "versions": [
     {
+      "version": "1.76.0",
+      "date": "2026-11-27",
+      "releasedAt": "2026-11-27T18:01:06+01:00",
+      "summary": "Notas generales en Documentación, «¿Descartar el texto?» al importar, pasar a privado dice quién conserva el acceso y plan por persona más ligero",
+      "changes": {
+        "nuevas": [
+          "Documentación: notas generales escritas en la app («Nueva nota») con el editor de las descripciones (formato, imágenes y menciones), guardado automático, aviso si cambian a la vez en otra pestaña o por otra persona, búsqueda en su texto y la opción de fijarlas arriba en «Notas generales» (también cualquier otro documento). Van a la papelera, se descargan como .md, entran en las copias y en la exportación del proyecto (también «Sin adjuntos»)."
+        ],
+        "mejoras": [
+          "Importar tareas: al cerrar con un texto del que no se lee ninguna tarea, pregunta «¿Descartar el texto?» en vez de «Hay tareas sin importar».",
+          "Pasar a privado un proyecto de equipo: la confirmación nombra a quienes mantienen el acceso (sus miembros, entre ellos quien lo creó, y tú)."
+        ],
+        "correcciones": [],
+        "tecnicos": [
+          "PDF del plan por persona: las subtareas pendientes se leen con tope en la base (las 15 que salen y su número), no todas.",
+          "Una imagen de Documentación pintada en una descripción ya no cuenta como descarga en Logs, y sus referencias se mantienen al exportar e importar."
+        ]
+      },
+      "en": {
+        "summary": "General notes in Documentation, “Discard the text?” when importing, making a project private says who keeps access, and a lighter per-person plan",
+        "changes": {
+          "nuevas": [
+            "Documentation: general notes written in the app (“New note”) with the task description editor (formatting, images and mentions), autosave, a warning if they change at the same time in another tab or by someone else, search in their text and the option to pin them at the top under “General notes” (any other document too). They go to the trash, download as .md, and are included in backups and in the project export (also “Without attachments”)."
+          ],
+          "mejoras": [
+            "Import tasks: closing with a text where no task can be read asks “Discard the text?” instead of “There are tasks not imported”.",
+            "Making a team project private: the confirmation names who keeps access (its members, including whoever created it, and you)."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Per-person plan PDF: pending subtasks are read with a cap in the database (the 15 shown and their count), not all of them.",
+            "A Documentation image shown in a description no longer counts as a download in Logs, and its references are kept when exporting and importing."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.75.1",
       "date": "2026-11-27",
       "releasedAt": "2026-11-27T15:44:55+01:00",
