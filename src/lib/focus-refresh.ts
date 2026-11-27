@@ -3,6 +3,7 @@
 //  - Canal en vivo (SSE) conectado y sin cortes desde la última sincronización: el servidor ya avisa de cada cambio,
 //    así que basta una comprobación de respaldo cada 5 minutos.
 //  - Sin canal en vivo (no soportado o aún sin conectar): como mucho una vez por minuto.
+//  - Canal sano y, además, al día según su `ping` (ver LIVE_CHECKED_REFRESH_MS): solo la recarga de seguridad (1 hora).
 //  - El canal estuvo desconectado desde la última sincronización (se pudieron perder avisos): se refresca al volver,
 //    con una pausa mínima de 10 s para que una conexión inestable no provoque una cadena de recargas.
 
@@ -17,10 +18,13 @@ interface FocusRefreshInput {
   channelOpen: boolean;
   /** ¿El canal se cortó desde la última sincronización (avisos que pudieron perderse)? */
   channelGap: boolean;
+  /** ¿El último `ping` (o saludo) confirmó hace poco que no se ha perdido ningún aviso? (ver `cursorChecked`) */
+  upToDate?: boolean;
 }
 
-export function shouldRefreshOnFocus({ sinceSyncMs, channelOpen, channelGap }: FocusRefreshInput): boolean {
+export function shouldRefreshOnFocus({ sinceSyncMs, channelOpen, channelGap, upToDate = false }: FocusRefreshInput): boolean {
   if (channelGap) return sinceSyncMs >= FOCUS_REFRESH_GAP_MS;
+  if (channelOpen && upToDate) return sinceSyncMs >= LIVE_CHECKED_REFRESH_MS;
   return sinceSyncMs >= (channelOpen ? FOCUS_REFRESH_LIVE_MS : FOCUS_REFRESH_MIN_MS);
 }
 
@@ -47,7 +51,24 @@ export function channelStalled({ open, sinceMessageMs }: { open: boolean; sinceM
   return open && !channelHealthy({ open, sinceMessageMs });
 }
 
+// Canal sano y al día: el `ping` lleva también la posición del proyecto en el canal (`{ boot, seq }`, como el saludo) y la
+// pestaña la compara con la suya (missedByPing, remoteChange.ts). Si se perdió algo, recarga en el acto; si coincide, no
+// hace falta la recarga de 15 minutos ni la de volver a la ventana: queda una de seguridad cada hora, que cubre lo que el
+// número no ve (un cambio que no se anuncia por el canal, un parche de tarjetas que no casó del todo, un fallo raro). Con
+// un servidor anterior (ping sin posición) nunca se da por al día y siguen los plazos de antes.
+export const LIVE_CHECKED_REFRESH_MS = 60 * 60_000;
+
+/**
+ * ¿Confirmó un mensaje del canal, hace poco, que la pestaña está al día? `sinceCheckMs`: desde el último `ping` (o saludo)
+ * cuya posición coincidía con la de la pestaña (Infinity si ninguno). Mismo margen que «sano»: si deja de llegar un ping
+ * con posición (servidor anterior tras un despliegue, proxy), al minuto se vuelve a los plazos normales.
+ */
+export function cursorChecked({ sinceCheckMs }: { sinceCheckMs: number }): boolean {
+  return sinceCheckMs < LIVE_HEALTHY_MS;
+}
+
 /** ¿Toca la recarga de respaldo? */
-export function backupRefreshDue({ sinceSyncMs, healthy }: { sinceSyncMs: number; healthy: boolean }): boolean {
+export function backupRefreshDue({ sinceSyncMs, healthy, upToDate = false }: { sinceSyncMs: number; healthy: boolean; upToDate?: boolean }): boolean {
+  if (healthy && upToDate) return sinceSyncMs >= LIVE_CHECKED_REFRESH_MS;
   return sinceSyncMs >= (healthy ? BACKUP_REFRESH_LIVE_MS : BACKUP_REFRESH_MS);
 }

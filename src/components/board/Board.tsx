@@ -2,7 +2,7 @@
 
 import { useMidnightRefresh } from "@/components/useMidnightRefresh";
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
-import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, uncoveredChanges, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
+import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedByPing, missedWhileClosed, removalOf, settleIncoming, uncoveredChanges, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import { lazyDialog } from "../lazyDialog";
 import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, reportServerHeard, safeRefresh, saveDataOn } from "@/lib/connection";
@@ -72,7 +72,7 @@ import { filesFrom, hasFiles, isImageFile, useBlockStrayFileDrops } from "./uplo
 import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages } from "../ui/pasteFiles";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
-import { BACKUP_CHECK_MS, backupRefreshDue, channelHealthy, channelStalled, shouldRefreshOnFocus } from "@/lib/focus-refresh";
+import { BACKUP_CHECK_MS, backupRefreshDue, channelHealthy, channelStalled, cursorChecked, shouldRefreshOnFocus } from "@/lib/focus-refresh";
 import { cardCount } from "./count-texts";
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
@@ -503,7 +503,9 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   const lastSyncAt = useRef(0); // se rellena al montar (efecto de datos)
   // `paused`: cerrado por tener la pestaña oculta (al volver a verse se reabre y su saludo decide si refrescar).
   // `heardAt`: último mensaje del servidor por el canal (el `ping` llega cada 25 s): sin él hace un minuto, el canal no está sano.
-  const channel = useRef({ open: false, gap: false, paused: false, heardAt: 0 });
+  // `checkedAt`: último `ping` (o saludo) cuya posición coincidía con la de la pestaña (0: ninguno o se perdió algo); con
+  // él reciente, la recarga de respaldo y la de volver a la ventana pasan a ser de seguridad, cada hora (focus-refresh.ts).
+  const channel = useRef({ open: false, gap: false, paused: false, heardAt: 0, checkedAt: 0 });
   // Refresco escalonado pendiente por un cambio de otra persona (ver foreignRefreshDelay): cualquier refresco lo cubre.
   const foreignTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tarjetas sueltas que han cambiado otras personas (livePatch.ts): se piden solo esas en vez del tablero entero. Ids a la
@@ -809,8 +811,17 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       heard();
       root?.setAttribute("data-live", "open");
     });
-    // Evento periódico del servidor: el canal está sano (la recarga de respaldo se espacia: ver más abajo).
-    source.addEventListener("ping", heard);
+    // Evento periódico del servidor: el canal está sano (la recarga de respaldo se espacia: ver más abajo). Trae además la
+    // posición del proyecto (`{ at, boot, seq }`): si es posterior a la de la pestaña, se perdió algún aviso y se recarga
+    // (como al reabrir); si coincide, la pestaña está al día. Un servidor anterior solo manda la hora: no se sabe (null) y
+    // mandan los plazos de antes.
+    source.addEventListener("ping", (e) => {
+      heard();
+      const missed = missedByPing(liveCursor, (e as MessageEvent<string>).data);
+      if (missed === null) return;
+      live.checkedAt = missed ? 0 : performance.now();
+      if (missed) refresh();
+    });
     // Quién está en el tablero y quién tiene abierta cada tarea: estado completo al conectar y después cada cambio.
     source.addEventListener("presence", (e) => {
       heard();
@@ -833,6 +844,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     let retry: ReturnType<typeof setTimeout> | null = null;
     source.addEventListener("error", () => {
       live.open = false;
+      live.checkedAt = 0;
       root?.removeAttribute("data-live");
       live.gap = true;
       // Sin canal, la presencia vuelve a preguntarse cada pocos segundos (Presence.tsx, TaskViewers.tsx).
@@ -858,6 +870,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       undrainedFor.current = null;
       if (missed) refresh();
       else live.gap = false;
+      live.checkedAt = !missed && liveCursor.current ? performance.now() : 0;
       if (undrained !== null && undrained !== data.project.id) incoming.current = [];
       else if (undrained !== null && !missed) drainIncoming();
     });
@@ -899,6 +912,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       if (retry) clearTimeout(retry);
       source.close();
       live.open = false;
+      live.checkedAt = 0;
       setLiveStream(null);
       setLiveProject(null);
       root?.removeAttribute("data-live");
@@ -908,11 +922,13 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   }, [data.project.id, data.currentUserId, drainIncoming, refresh, sseEpoch, visible]);
 
   // Refresco ligero de respaldo (por si el canal de avisos no llega) y al volver a la ventana. Con el canal sano (su `ping`
-  // llegó hace menos de un minuto) la recarga periódica es cada 15 minutos; sin él, cada 2. Al volver no se recarga cada
-  // vez: se espacia según el estado del canal en vivo. Reglas en lib/focus-refresh.ts.
+  // llegó hace menos de un minuto) la recarga periódica es cada 15 minutos; sin él, cada 2; sano y al día (la posición del
+  // último `ping` coincidía), solo una de seguridad cada hora. Al volver no se recarga cada vez: se espacia según el estado
+  // del canal en vivo. Reglas en lib/focus-refresh.ts.
   useEffect(() => {
     const idle = () => document.visibilityState === "visible" && pending.current === 0 && !document.querySelector("[role=dialog]");
     const healthy = () => channelHealthy({ open: channel.current.open, sinceMessageMs: performance.now() - channel.current.heardAt });
+    const upToDate = () => channel.current.checkedAt > 0 && cursorChecked({ sinceCheckMs: performance.now() - channel.current.checkedAt });
     const tick = () => {
       // Canal abierto pero mudo (un proxy que no deja pasar nada): no da error, así que la presencia se quedaba congelada.
       // Se da por caído: vuelven los sondeos de la presencia y se abre otro canal.
@@ -923,14 +939,14 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
         setLiveProject(null);
         setSseEpoch((n) => n + 1);
       }
-      if (idle() && backupRefreshDue({ sinceSyncMs: performance.now() - lastSyncAt.current, healthy: healthy() })) refresh();
+      if (idle() && backupRefreshDue({ sinceSyncMs: performance.now() - lastSyncAt.current, healthy: healthy(), upToDate: upToDate() })) refresh();
     };
     const onFocus = () => {
       if (!idle()) return;
       const { gap, paused } = channel.current;
       // Canal cerrado por tener la pestaña oculta y reabriéndose: decide su saludo (no se refresca dos veces).
       if (paused && typeof EventSource !== "undefined") return;
-      if (shouldRefreshOnFocus({ sinceSyncMs: performance.now() - lastSyncAt.current, channelOpen: healthy(), channelGap: gap })) refresh();
+      if (shouldRefreshOnFocus({ sinceSyncMs: performance.now() - lastSyncAt.current, channelOpen: healthy(), channelGap: gap, upToDate: upToDate() })) refresh();
     };
     const timer = setInterval(tick, BACKUP_CHECK_MS);
     window.addEventListener("focus", onFocus);

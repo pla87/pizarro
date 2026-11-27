@@ -91,8 +91,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
       const unsubscribePresence = subscribePresence(project.id, sendPresence);
       // Evento periódico con nombre (no un comentario: el navegador no los ve): mantiene viva la conexión a través de
       // proxies y le dice a la pestaña que el canal está sano (con él, el respaldo del tablero se espacia: Board.tsx).
-      // Quién deja de contar como activo (5 minutos sin actividad) lo comprueba presence.ts una vez por proyecto.
-      const ping = setInterval(() => send(`event: ping\ndata: ${Date.now()}\n\n`), PING_MS);
+      // Lleva también la posición del proyecto (`boot` y `seq`, como el saludo): la pestaña ve así si se perdió algún aviso
+      // con el canal abierto y, si no, se ahorra las recargas de respaldo (focus-refresh.ts). `at` es la hora, que era todo
+      // lo que llevaba antes (las pestañas anteriores no leen el contenido). Quién deja de contar como activo (5 minutos
+      // sin actividad) lo comprueba presence.ts una vez por proyecto.
+      const ping = setInterval(() => send(`event: ping\ndata: ${JSON.stringify({ at: Date.now(), ...liveCursor(project.id) })}\n\n`), PING_MS);
       let checking = false;
       const recheck = setInterval(() => {
         if (checking) return;

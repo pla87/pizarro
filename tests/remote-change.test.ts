@@ -2,7 +2,7 @@
 // llegar y cuáles esperan a que termine la acción propia (src/components/board/remoteChange.ts).
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { advanceCursor, announceOnArrival, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor } from "../src/components/board/remoteChange";
+import { advanceCursor, announceOnArrival, missedByPing, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor } from "../src/components/board/remoteChange";
 
 describe("canal en vivo con acciones propias en vuelo (una subida larga)", () => {
   test("lo de otras personas (o del sistema) se reenvía al llegar; lo propio espera", () => {
@@ -62,6 +62,39 @@ describe("canal cerrado mientras la pestaña está oculta (HTTP/1.1: 6 conexione
     assert.deepEqual(advanceCursor({ boot: "b1", seq: 9 }, { boot: "b1", seq: 4 }), { boot: "b1", seq: 9 });
     assert.deepEqual(advanceCursor({ boot: "b1", seq: 9 }, { boot: "b2", seq: 1 }), { boot: "b2", seq: 1 });
     assert.deepEqual(advanceCursor(null, undefined), null);
+  });
+});
+
+describe("ping con la posición del canal (se ahorra la recarga de respaldo si la pestaña está al día)", () => {
+  const ping = (boot: string, seq: number) => JSON.stringify({ at: 1_700_000_000_000, boot, seq });
+  test("al día: false y no mueve la posición; aviso perdido: true una sola vez", () => {
+    const cursor: { current: LiveCursor | null } = { current: { boot: "b1", seq: 5 } };
+    assert.equal(missedByPing(cursor, ping("b1", 5)), false);
+    assert.deepEqual(cursor.current, { boot: "b1", seq: 5 });
+    assert.equal(missedByPing(cursor, ping("b1", 3)), false, "la pestaña va por delante (datos pedidos después): al día");
+    assert.deepEqual(cursor.current, { boot: "b1", seq: 5 }, "nunca retrocede");
+    assert.equal(missedByPing(cursor, ping("b1", 7)), true, "se perdió un aviso con el canal abierto: recarga");
+    assert.deepEqual(cursor.current, { boot: "b1", seq: 7 });
+    assert.equal(missedByPing(cursor, ping("b1", 7)), false, "el mismo hueco no recarga dos veces");
+    assert.equal(missedByPing(cursor, ping("b2", 0)), true, "otro proceso del servidor: no se puede saber, recarga");
+    assert.deepEqual(cursor.current, { boot: "b2", seq: 0 });
+  });
+  test("ping de un servidor anterior (solo la hora), ilegible o sin posición previa: no se sabe (null), sin recargar", () => {
+    const cursor: { current: LiveCursor | null } = { current: { boot: "b1", seq: 5 } };
+    assert.equal(missedByPing(cursor, "1700000000000"), null, "formato antiguo: Date.now()");
+    assert.equal(missedByPing(cursor, "{roto"), null);
+    assert.equal(missedByPing(cursor, "null"), null);
+    assert.equal(missedByPing(cursor, JSON.stringify({ at: 1, boot: "b1" })), null, "sin seq");
+    assert.deepEqual(cursor.current, { boot: "b1", seq: 5 });
+    const empty: { current: LiveCursor | null } = { current: null };
+    assert.equal(missedByPing(empty, ping("b1", 4)), null);
+    assert.deepEqual(empty.current, { boot: "b1", seq: 4 }, "toma la posición del ping para los siguientes");
+    assert.equal(missedByPing(empty, ping("b1", 4)), false);
+  });
+  test("el saludo sigue igual con el formato nuevo de mensaje (campos de más)", () => {
+    const cursor: { current: LiveCursor | null } = { current: { boot: "b1", seq: 5 } };
+    assert.equal(missedWhileClosed(cursor, JSON.stringify({ boot: "b1", seq: 5, stream: "s" })), false);
+    assert.equal(missedWhileClosed(cursor, "null"), true, "ilegible con posición: refresca, como antes");
   });
 });
 
