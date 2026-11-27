@@ -42,6 +42,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   if (!user) return new Response(t("No autorizado"), { status: 401 });
   const parsed = v.id.safeParse((await ctx.params).projectId);
   if (!parsed.success) return new Response(t("No encontrado"), { status: 404 });
+  // Sin la caché de acceso (canAccessProject): abrir el canal es raro y, con una vía que no la vaciase, se seguirían
+  // recibiendo los cambios del proyecto hasta la siguiente comprobación (cada 5 min).
   const project = await db.project.findFirst({ where: { id: parsed.data, ...visibleProjectsWhere(user) }, select: { id: true } });
   if (!project) return new Response(t("No encontrado"), { status: 404 });
 

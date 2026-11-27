@@ -683,7 +683,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
         setDragOver(null);
       }}
       onKeyDown={(e) => onChipKey(e, task)}
-      title={`${task.title} · ${task.kind.name}${showProject ? ` · ${task.projectName}` : ""}`}
+      title={`${task.title} · ${task.kind.name}${showProject ? ` · ${task.projectName}` : ""}${isOverdue(task, today) ? ` · ${t("Plazo vencido")}` : ""}`}
       aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
       style={kindBadgeStyle(task.kind.color)}
       className={cn(

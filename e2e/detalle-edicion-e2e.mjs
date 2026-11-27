@@ -290,7 +290,7 @@ if (only.includes("imagen")) {
   await L.eqEventually("IMAGEN: y se inserta en el editor", () => d.locator(`[contenteditable=true] img[src="/api/attachments/${first.id}"]`).count(), 1);
   await L.eqEventually("IMAGEN: sale también en «Capturas y adjuntos»", () => d.locator(`img[src="/api/attachments/${first.id}?thumb=1"]`).count(), 1);
   await saveDesc(d).click();
-  await L.eqEventually("IMAGEN: guardada donde estaba el cursor", async () => (await row(id)).description, `Antes \n\n![${first.name}](/api/attachments/${first.id})\n\ndespués`); // ronda 69: la imagen va en su propio párrafo
+  await L.eqEventually("IMAGEN: guardada donde estaba el cursor", async () => (await row(id)).description, `Antes\n\n![${first.name}](/api/attachments/${first.id})\n\ndespués`); // ronda 69: la imagen va en su propio párrafo
   L.eq("IMAGEN: la descripción guardada la muestra", await d.getByRole("group", { name: "Descripción" }).locator(`img[src^="/api/attachments/${first.id}"]`).count(), 1);
   // Soltar un fichero de imagen sobre el editor abierto: adjunto e imagen en el texto; el aviso «Suelta para adjuntar» se va.
   await openDesc(d);

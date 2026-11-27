@@ -341,7 +341,7 @@ export const board: Record<string, string> = {
   "Negrita (editor con barra)": "Bold (editor with toolbar)",
   "Cursiva (editor con barra)": "Italic (editor with toolbar)",
   "Subrayado (editor con barra)": "Underline (editor with toolbar)",
-  "Elegir persona o comando en la lista de «@» (también Tab)": "Pick a person or command in the «@» list (Tab also works)",
+  "Elegir persona o comando en la lista de «@» (también Tab)": "Pick a person or command in the “@” list (Tab also works)",
   "Editar la subtarea con el foco": "Edit the focused subtask",
   "Añadir la subtarea o guardar la que editas": "Add the subtask or save the one you are editing",
   "Guardar el comentario que editas": "Save the comment you are editing",
@@ -381,4 +381,7 @@ export const board: Record<string, string> = {
   "Deshecho: «{title}» vuelve a «{from}»": "Undone: “{title}” is back in “{from}”",
   "Rehecho: «{title}» otra vez en «{to}»": "Redone: “{title}” is in “{to}” again",
   "Has pedido muchos PDF seguidos: espera un minuto y vuelve a intentarlo.": "You have requested many PDFs in a row: wait a minute and try again.",
+  // Ronda 70: descartar varias tareas
+  "Descartar las tareas": "Discard the tasks",
+  "Hay tareas sin crear. ¿Descartarlas?": "Some tasks are not created yet. Discard them?",
 };

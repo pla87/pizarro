@@ -3,7 +3,7 @@
 //    un solo fichero, dist/pdf-worker.mjs: el servidor de Next no carga @react-pdf (solo le pasa datos al worker), así
 //    que el standalone no lo incluye. En Docker, dist/ se copia entero a la imagen (Dockerfile); para `npm start`, el
 //    fichero se copia también a .next/standalone/dist (server.js se ejecuta desde esa carpeta).
-// 2. Copia los recursos estáticos dentro de .next/standalone para `npm start` (en Docker se copian en el propio Dockerfile).
+// 2. Copia los recursos estáticos dentro de .next/standalone, tanto para `npm start` como para Docker (el Dockerfile ya no los copia).
 // 3. Quita del standalone los datos y secretos que no deben ir en él (ver más abajo).
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";

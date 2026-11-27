@@ -95,4 +95,6 @@ export const importar: Record<string, string> = {
     "Dates come in two formats (day/month and month/day): the ones that work both ways (like 03/04/2026) were read as {order}. Please check them.",
   "día/mes": "day/month",
   "mes/día": "month/day",
+  // Ronda 70: tipos repetidos al importar
+  "El tipo «{from}» ya existe como tipo general aquí y se ha importado como «{to}».": "The type “{from}” already exists here as a general type and has been imported as “{to}”.",
 };

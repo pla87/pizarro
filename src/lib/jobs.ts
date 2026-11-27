@@ -40,7 +40,7 @@ export interface JobDef {
   /** Nombre fijo (clave de JobRun). */
   name: string;
   run: () => Promise<unknown>;
-  /** Si se indica, no se repite hasta que pase este tiempo desde el último arranque (guardado en JobRun). */
+  /** Si se indica, no se repite hasta que pase este tiempo desde el último arranque que terminó bien (guardado en JobRun). */
   everyMs?: number;
 }
 
@@ -60,11 +60,11 @@ const MAX_ERROR_CHARS = 500;
 
 /** Ejecuta una tarea y anota en JobRun cuándo empezó y cómo terminó; nunca lanza. */
 export async function runJob(job: JobDef, now: Date = new Date()): Promise<JobOutcome> {
+  let previousStart: Date | null = null;
   try {
-    if (job.everyMs) {
-      const last = await db.jobRun.findUnique({ where: { name: job.name }, select: { lastStartedAt: true } });
-      if (last?.lastStartedAt && now.getTime() - last.lastStartedAt.getTime() < job.everyMs) return "skipped";
-    }
+    const last = await db.jobRun.findUnique({ where: { name: job.name }, select: { lastStartedAt: true } });
+    previousStart = last?.lastStartedAt ?? null;
+    if (job.everyMs && previousStart && now.getTime() - previousStart.getTime() < job.everyMs) return "skipped";
     await db.jobRun.upsert({ where: { name: job.name }, create: { name: job.name, lastStartedAt: now }, update: { lastStartedAt: now } });
   } catch (err) {
     console.error(`[jobs] ${job.name}: no se pudo anotar el inicio`, err);
@@ -80,7 +80,8 @@ export async function runJob(job: JobDef, now: Date = new Date()): Promise<JobOu
     error = (err instanceof Error ? err.message : String(err)).slice(0, MAX_ERROR_CHARS) || "Error";
   }
   try {
-    await db.jobRun.update({ where: { name: job.name }, data: { lastFinishedAt: new Date(), lastOk: error === null, lastError: error ?? (skipped ? SKIP_PREFIX + skipped : null) } });
+    await db.jobRun.update({ where: { name: job.name }, data: { lastFinishedAt: new Date(), lastOk: error === null, lastError: error ?? (skipped ? SKIP_PREFIX + skipped : null), // Si falla, el arranque no cuenta: se reintenta en la pasada siguiente, no a las 23 h.
+        ...(error !== null && job.everyMs ? { lastStartedAt: previousStart } : {}) } });
   } catch (err) {
     console.error(`[jobs] ${job.name}: no se pudo anotar el final`, err);
   }

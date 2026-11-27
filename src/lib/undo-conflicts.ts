@@ -52,12 +52,12 @@ export async function findUndoConflicts(
   const [events, comments, attachments, links] = all.length
     ? await Promise.all([
         db.taskEvent.findMany({
-          where: { taskId: { in: all }, projectId, createdAt: { gt: since }, AND: [{ userId: { not: null } }, { userId: { not: userId } }] },
+          where: { taskId: { in: all }, projectId, createdAt: { gt: since }, OR: [{ userId: null }, { userId: { not: userId } }] },
           orderBy: { createdAt: "asc" },
           select: { taskId: true, userName: true, code: true },
         }),
         removedTasks.size
-          ? db.taskComment.findMany({ where: { taskId: { in: [...removedTasks] }, createdAt: { gt: since }, deletedAt: null, AND: [{ authorId: { not: null } }, { authorId: { not: userId } }] }, select: { taskId: true, author: { select: { name: true } } } })
+          ? db.taskComment.findMany({ where: { taskId: { in: [...removedTasks] }, createdAt: { gt: since }, deletedAt: null, OR: [{ authorId: null }, { authorId: { not: userId } }] }, select: { taskId: true, authorName: true, author: { select: { name: true } } } })
           : [],
         removedTasks.size
           ? db.taskAttachment.findMany({ where: { taskId: { in: [...removedTasks] }, createdAt: { gt: since }, AND: [{ createdById: { not: null } }, { createdById: { not: userId } }] }, select: { taskId: true, createdBy: { select: { name: true } } } })
@@ -74,11 +74,12 @@ export async function findUndoConflicts(
     if (name && !names.includes(name)) names.push(name);
   };
   for (const e of events) {
+    // (userId null: la web de «Compartir fuera», siempre otra persona; su userName es «<columna> (fuera)».)
     // Lo que cuenta en cada tarea: quitarla entera, cualquier cambio; devolver sus campos, los de la tarjeta; sus subtareas, las subtareas.
     const relevant = removedTasks.has(e.taskId) || (fieldTasks.has(e.taskId) && !CHILD_CODES.includes(e.code)) || (subtaskTasks.has(e.taskId) && e.code === "subtask");
     if (relevant) note(e.taskId, e.userName);
   }
-  for (const c of comments) note(c.taskId, c.author?.name);
+  for (const c of comments) note(c.taskId, c.author?.name ?? c.authorName);
   for (const a of attachments) note(a.taskId, a.createdBy?.name);
   for (const l of links) note(l.taskId, l.createdBy?.name);
   const added = { comments: comments.length, attachments: attachments.length, links: links.length };

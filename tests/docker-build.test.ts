@@ -83,3 +83,9 @@ test("build:boot: los cinco scripts de dist/ de una vez, con trozos compartidos 
   assert.match(readFileSync("scripts/start-local.mjs", "utf8"), /path\.join\(root, "dist", "boot\.mjs"\)/);
   assert.match(dockerfile, /^COPY --from=build \/app\/dist \.\/dist$/m);
 });
+
+test("ronda 70: la imagen no copia aparte .next/static ni public (postbuild.mjs ya los deja en el standalone)", () => {
+  assert.ok(!/COPY --from=build \/app\/\.next\/static/.test(dockerfile));
+  assert.ok(!/COPY --from=build \/app\/public/.test(dockerfile));
+  assert.match(readFileSync("scripts/postbuild.mjs", "utf8"), /cpSync\("\.next\/static"/);
+});

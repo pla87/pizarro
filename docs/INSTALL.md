@@ -472,9 +472,8 @@ Instala el código de la etiqueta `v1.49.0` y fija la imagen `ghcr.io/pla87/piza
 ```bash
 cd /opt/pizarro/deploy
 docker compose stop app
-docker compose exec -T postgres dropdb -U pizarro pizarro
-docker compose exec -T postgres createdb -U pizarro pizarro
-docker compose exec -T postgres pg_restore -U pizarro -d pizarro --no-owner < pizarro-AAAA-MM-DD.dump
+docker compose exec -T postgres sh -c 'dropdb -U "${APP_DB_USER:-pizarro}" pizarro && createdb -U "${APP_DB_USER:-pizarro}" pizarro'
+docker compose exec -T postgres sh -c 'pg_restore -U "${APP_DB_USER:-pizarro}" -d pizarro --no-owner' < pizarro-AAAA-MM-DD.dump
 docker compose up -d
 ```
 
@@ -525,10 +524,8 @@ docker compose up -d
 ```bash
 cd /opt/pizarro/deploy
 docker compose stop app
-docker compose exec -T postgres dropdb -U pizarro pizarro
-docker compose exec -T postgres createdb -U pizarro pizarro
 docker compose run --rm --no-deps app node dist/restore.mjs latest --list
-docker compose run --rm --no-deps app node dist/restore.mjs local:pizarro-backup-AAAAMMDDTHHMMSSZ --files
+docker compose run --rm --no-deps app node dist/restore.mjs local:pizarro-backup-AAAAMMDDTHHMMSSZ --files --force
 docker compose up -d
 ```
 

@@ -290,6 +290,9 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     }
   }
   snap.createdColumns = created;
+  // Todas las columnas que reciben o ceden tareas se bloquean ya, una vez y en orden (lockColumns las ordena): «Mover a…»
+  // toma columna → filas de tareas, y bloquear columnas dentro del bucle, con filas ya tomadas, podía cruzarse con él (40P01).
+  await lockColumns(tx, [...targetId, ...plan.columns.flatMap((c) => c.absorb)]);
   // Nombre, rol, orden y límite de cada columna final (antes de mover tareas: así los disparadores de la base de datos ven
   // ya el rol de su columna nueva); las conservadas, después y en su orden.
   const finals: { id: string; name?: string; isDone?: boolean; wipLimit?: number | null; assignDueDays?: number | null; role: string; position: number }[] = [
@@ -330,7 +333,6 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
   for (const [i, c] of plan.columns.entries()) {
     if (!c.absorb.length) continue;
     const target = targetId[i]!;
-    await lockColumns(tx, [target, ...c.absorb]);
     const rows = await tx.task.findMany({ where: { projectId, columnId: { in: c.absorb } }, select: taskSelect });
     if (!rows.length) continue;
     rows.sort((a, b) => order.get(a.columnId)! - order.get(b.columnId)! || a.position - b.position || (a.id < b.id ? -1 : 1));

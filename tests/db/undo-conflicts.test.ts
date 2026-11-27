@@ -29,6 +29,17 @@ describe("deshacer con cambios ajenos posteriores", () => {
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Uno (Ana)");
   });
 
+  test("un cambio hecho desde la web de «Compartir fuera» (sin usuario) también avisa, con el nombre de la columna", async () => {
+    const { me, f } = await team();
+    const task = await makeTask(f, { title: "Fuera" });
+    await loginAs(me);
+    expectOk(await updateTask(task.id, { title: "Fuera (yo)" }));
+    await db.taskEvent.create({ data: { taskId: task.id, projectId: f.project.id, userId: null, userName: "Cliente (fuera)", code: "title", label: "" } });
+    const res = expectOk(await undoChecked(f.project.id));
+    assert.ok(res.conflict, "debe pedir confirmación");
+    assert.ok(res.conflict.message.startsWith("Cliente (fuera) cambió esta tarea después"));
+  });
+
   test("mis propios cambios posteriores no cuentan", async () => {
     const { me, f } = await team();
     const task = await makeTask(f, { title: "Propia" });
@@ -62,6 +73,16 @@ describe("deshacer con cambios ajenos posteriores", () => {
     const done = expectOk(await undoChecked(f.project.id, null, res.conflict.entryId));
     assert.ok(done.applied);
     assert.equal(await db.task.count({ where: { id: created.id } }), 0);
+  });
+
+  test("un comentario de «Compartir fuera» (sin usuario) en una tarea que se borraría también avisa, con su nombre", async () => {
+    const { me, f } = await team();
+    await loginAs(me);
+    const created = expectOk(await createTask({ projectId: f.project.id, columnId: f.columns.todo, title: "Nueva fuera", kindId: f.kindId }));
+    await db.taskComment.create({ data: { taskId: created.id, authorId: null, authorName: "Cliente (fuera)", body: "hola" } });
+    const res = expectOk(await undoChecked(f.project.id));
+    assert.ok(res.conflict, "debe pedir confirmación");
+    assert.match(res.conflict.message, /^Cliente \(fuera\) cambió esta tarea después\. También se borrará lo que añadieron: 1 comentario/);
   });
 
   test("varias personas en varias tareas (archivado masivo): «Otras personas (…) cambiaron N de estas tareas»", async () => {

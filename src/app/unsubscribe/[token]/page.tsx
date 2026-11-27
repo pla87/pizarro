@@ -1,11 +1,19 @@
 import { headers } from "next/headers";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { getT } from "@/i18n/server";
+import { makeT } from "@/i18n/core";
+import { toLocale } from "@/i18n/shared";
 import type { T } from "@/i18n/core";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { resolveUnsubscribe, type UnsubscribeTarget } from "@/lib/unsubscribe";
 
+/** Traductor en el idioma de la persona del enlace; sin ella (informe, enlace no válido), el de la instancia. */
+async function tFor(target: UnsubscribeTarget | null) {
+  return target?.locale ? makeT(toLocale(target.locale)) : getT();
+}
+
+// El título de la pestaña, en el idioma de la instancia: resolver aquí el token sería una consulta antes del tope de intentos.
 export async function generateMetadata() {
   const t = await getT();
   return { title: t("Dejar de recibir estos emails"), robots: { index: false, follow: false } };
@@ -30,12 +38,13 @@ function what(target: UnsubscribeTarget, t: T): string {
  */
 export default async function UnsubscribePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const t = await getT();
-  const title = t("Dejar de recibir estos emails");
   if (!rateLimit(`unsub:page:${rateIp(clientIp(await headers()))}`, 60, 10 * 60_000)) {
-    return <AuthCard title={title}><p className="text-sm">{t("Demasiados intentos. Espera unos minutos.")}</p></AuthCard>;
+    const t = await getT();
+    return <AuthCard title={t("Dejar de recibir estos emails")}><p className="text-sm">{t("Demasiados intentos. Espera unos minutos.")}</p></AuthCard>;
   }
   const target = await resolveUnsubscribe(token);
+  const t = await tFor(target);
+  const title = t("Dejar de recibir estos emails");
   if (!target) {
     return (
       <AuthCard title={t("Enlace no válido")}>

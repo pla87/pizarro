@@ -171,7 +171,7 @@ function PromptDialog({
           autoComplete="off"
           spellCheck={number ? false : undefined}
           // 16 px en el móvil: con menos, iOS amplía la página al enfocar el campo.
-          className={cn("input max-sm:text-base", error && "border-red-500 focus:border-red-500 focus:ring-red-500/30 dark:border-red-500")}
+          className={cn("input", error && "border-red-500 focus:border-red-500 focus:ring-red-500/30 dark:border-red-500")}
           value={value}
           onChange={(e) => {
             setValue(e.target.value);

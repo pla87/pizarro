@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ExternalLink, Folder, ListChecks } from "lucide-react";
+import { Columns3, ExternalLink, Folder, ListChecks } from "lucide-react";
 import { myOpenTasksWhere } from "@/lib/my-tasks-server";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
@@ -156,7 +156,9 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                       );
                     })()}
                     {sub && sub.total > 0 && <span className="text-xs text-slate-500">{sub.done}/{sub.total}</span>}
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={`${t("Columna")}: ${task.column.name}`}>
+                      <Columns3 size={11} className="shrink-0" aria-hidden />
+                      <span className="sr-only">{t("Columna")}: </span>
                       {task.column.name}
                     </span>
                     {task.linkUrl && (

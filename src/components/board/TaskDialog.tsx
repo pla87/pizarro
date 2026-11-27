@@ -1573,7 +1573,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               selected={task.labelIds}
               onToggle={(id, on) => {
                 const labelIds = on ? [...task.labelIds, id] : task.labelIds.filter((x) => x !== id);
-                save({ labelIds }, { labelIds });
+                // El cambio, no la lista entera: dos personas que marcan etiquetas a la vez no se pisan.
+                save(on ? { addLabelIds: [id] } : { removeLabelIds: [id] }, { labelIds });
               }}
               className="md:gap-1"
             >

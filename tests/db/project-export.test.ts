@@ -285,6 +285,15 @@ describe("exportar e importar un proyecto", () => {
     assert.equal(task.description, `Mira ![captura](/api/attachments/${imported.id}) y ![ajena](/api/attachments/cotroproyecto)`);
     assert.ok(task.comments.some((c) => c.body === `Aquí: ![captura](/api/attachments/${imported.id}?thumb=1)`));
 
+    // También el histórico de releases.
+    await db.release.updateMany({ where: { projectId }, data: { content: `Nota ![captura](/api/attachments/${img.id})` } });
+    const withRel = projectJsonOf(await buildProjectExport(projectId, { attachments: true, scope: "all" }, ADMIN_EXPORT));
+    assert.equal(withRel.releases[0]!.content, `Nota ![captura](/api/attachments/${ref})`);
+    const s2 = await importProjectFile(await writeExport(await buildProjectExport(projectId, { attachments: true, scope: "all" }, ADMIN_EXPORT)), asImporter(admin), { isPrivate: false });
+    const task2 = await db.task.findFirstOrThrow({ where: { projectId: s2.projectId, title: "Tarea completa" }, include: { attachments: true } });
+    const rel2 = await db.release.findFirstOrThrow({ where: { projectId: s2.projectId } });
+    assert.equal(rel2.content, `Nota ![captura](/api/attachments/${task2.attachments.find((a) => a.isImage)!.id})`);
+
     // Sin adjuntos en el archivo, el texto queda como estaba.
     const bare = projectJsonOf(await buildProjectExport(projectId, { attachments: false, scope: "board" }, ADMIN_EXPORT));
     assert.match(bare.tasks.find((x) => x.title === "Tarea completa")!.description, new RegExp(`/api/attachments/${img.id}\\)`));
@@ -737,6 +746,34 @@ describe("importar: personas", () => {
     assert.equal(tasks[2]!.kind.projectId, s.projectId);
     assert.equal(await db.taskKind.count({ where: { projectId: s.projectId } }), 2);
     assert.equal(await db.projectHiddenKind.count({ where: { projectId: s.projectId, kindId: existing.id } }), 1);
+  });
+
+  test("un tipo del proyecto con el nombre de un tipo general se importa con nombre libre y avisa", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const general = await makeKind(null);
+    const kind = { ref: "k1", name: general.name, color: "#3b82f6", position: 1, titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [], scope: "project" as const };
+    const data = minimal([{ kindRef: "k1" }], { kinds: [kind] });
+    data.columns[0]!.defaultKindName = general.name;
+    const s = await importProjectFile(await craft(data), asImporter(admin), { isPrivate: false });
+    const col = await db.column.findFirstOrThrow({ where: { projectId: s.projectId } });
+    const task = await db.task.findFirstOrThrow({ where: { projectId: s.projectId } });
+    const own = await db.taskKind.findMany({ where: { projectId: s.projectId } });
+    assert.deepEqual(own.map((k) => k.name), [`${general.name} (2)`]);
+    assert.equal(col.defaultKindId, own[0]!.id);
+    assert.equal(task.kindId, own[0]!.id);
+    assert.ok(s.warnings.some((w) => w.includes(general.name) && w.includes("(2)")));
+  });
+
+  test("un tipo renombrado no se funde con otro tipo del archivo que ya se llama como el nuevo nombre", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const general = await makeKind(null);
+    const mk = (ref: string, name: string) => ({ ref, name, color: "#3b82f6", position: 1, titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [], scope: "project" as const });
+    const data = minimal([{ kindRef: "k1" }], { kinds: [mk("k1", general.name), mk("k2", `${general.name} (2)`)] });
+    const s = await importProjectFile(await craft(data), asImporter(admin), { isPrivate: false });
+    const own = await db.taskKind.findMany({ where: { projectId: s.projectId } });
+    assert.equal(own.length, 2);
+    assert.equal(new Set(own.map((k) => k.name.toLowerCase())).size, 2);
+    assert.ok(own.some((k) => k.name === `${general.name} (2)`));
   });
 });
 
