@@ -254,7 +254,8 @@ if (only.includes("kind")) {
     await page.keyboard.press("Alt+N");
     await U.dialog(page).waitFor();
     // Con un espacio detrás, para seguir escribiendo (se quita al guardar).
-    L.eq("KIND: el tipo preseleccionado aplica su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "Plantilla del tipo ");
+    // Ronda 69: el tipo que viene solo de «el último usado» no prefija el título (sí la descripción y las subtareas).
+    L.eq("KIND: el tipo preseleccionado (último usado) no pone su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "");
     // La descripción puede ser un textarea o el editor con formato (según el perfil): se lee lo que haya en el diálogo.
     const dialogText = () => U.dialog(page).evaluate((el) => [...el.querySelectorAll("textarea")].map((x) => x.value).join("\n") + "\n" + el.innerText);
     L.check("KIND: y su descripción de plantilla", (await dialogText()).includes("Pasos para reproducir:"));
