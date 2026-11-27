@@ -16,7 +16,6 @@ import type { EditAnchor } from "@/lib/edit-anchor";
 import { anchorFromTextarea, placeEditorAt, placeTextareaAt } from "./editAnchorDom";
 import { attachablePasteFiles, claimDrop, claimPaste, pasteClaimed, recoverEmptyImages } from "./pasteFiles";
 import { isUntypedImage } from "@/lib/document-kind";
-import { insertImageBlocks } from "@/lib/editor-extensions";
 import { useToast } from "./Toast";
 
 import type { EditorModeValue, UserOption } from "@/lib/types";
@@ -24,10 +23,15 @@ import type { EditorModeValue, UserOption } from "@/lib/types";
 // El editor con barra (TipTap) pesa: solo se descarga para quien lo usa (el tablero lo precarga en reposo).
 type RichEditor = typeof import("./RichTextEditor").RichTextEditor;
 let richEditor: RichEditor | null = null;
+// Viene con el editor (no se importa aquí: arrastraría ProseMirror al trozo que se carga siempre).
+let insertImageBlocks: typeof import("./RichTextEditor").insertImageBlocks | null = null;
 let richEditorLoad: Promise<RichEditor> | null = null;
 function loadRichEditor(): Promise<RichEditor> {
   richEditorLoad ??= import("./RichTextEditor").then(
-    (m) => (richEditor = m.RichTextEditor),
+    (m) => {
+      insertImageBlocks = m.insertImageBlocks;
+      return (richEditor = m.RichTextEditor);
+    },
     (e: unknown) => {
       richEditorLoad = null; // sin red: se reintenta la próxima vez
       throw e;
@@ -125,11 +129,12 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
   const insertImages = (images: InlineImage[]) => {
     if (!images.length) return;
     const ed = editorOutRef.current;
-    if (mode === "WYSIWYG" && ed && !ed.isDestroyed) {
+    const toBlocks = insertImageBlocks;
+    if (mode === "WYSIWYG" && ed && !ed.isDestroyed && toBlocks) {
       // Cada imagen, en su propio bloque (no en línea dentro del párrafo): el cursor queda en un párrafo nuevo debajo.
       const nodes = images.map((img) => ed.schema.nodes.markdownImage!.create({ raw: imageMarkdown(img), src: `/api/attachments/${img.id}`, alt: img.name }));
       ed.chain().command(({ tr }) => {
-        insertImageBlocks(tr, nodes);
+        toBlocks(tr, nodes);
         return true;
       }).run();
       return;

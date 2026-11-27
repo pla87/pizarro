@@ -10,6 +10,9 @@ import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { ListDeleteFix } from "@/lib/editor-keys";
 import { formatExtensions } from "@/lib/editor-extensions";
+
+// Para DescriptionField, que la recibe al cargar el editor (así no importa ProseMirror por su cuenta).
+export { insertImageBlocks } from "@/lib/editor-extensions";
 import { safeMarkdownUrl } from "@/lib/safe-url";
 import { MentionChip } from "@/lib/editor-mention";
 import { mentionSuffix } from "@/lib/mention-edit";
