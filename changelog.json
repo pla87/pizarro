@@ -1,6 +1,79 @@
 {
   "versions": [
     {
+      "version": "1.73.0",
+      "date": "2026-11-27",
+      "releasedAt": "2026-11-27T01:15:08+01:00",
+      "summary": "Compartir fuera más claro (diálogo, pie, quién revocó, web con autor y miniaturas), imágenes pegadas como bloque propio, «Guardar y cerrar», avisos informativos, arreglos de Nueva tarea, Deshacer, Miembros y plantillas, y npm start con menos memoria",
+      "changes": {
+        "nuevas": [
+          "«Compartir fuera» más claro: el diálogo de la web enseña la dirección destacada (un clic la copia) con «Copiar», «Abrir» y «Enviar por email», dice qué puede hacer quien tenga el enlace y deja «Revocar enlace» aparte, con confirmación.",
+          "En «Compartir fuera», el pie avisa con «Hay cambios sin publicar» cuando entran o salen tareas de la columna, y cualquier miembro del proyecto puede revocar el enlace: el globo, el pie y el diálogo dicen quién lo revocó y cuándo.",
+          "La web de fuera dice «Compartida por <nombre> desde Pizarro», enseña una miniatura de los adjuntos que son imagen y muestra el aviso de cada acción en la tarjeta de su tarea."
+        ],
+        "mejoras": [
+          "El pie de «Compartir fuera» se acorta: un aviso breve, el botón «Link» con el mismo color que «Actualizar web» y la caducidad como botón con reloj que cambia entre 7 días, 1 mes y 3 meses.",
+          "Una columna vacía no genera web («No hay tareas en…»), y con un enlace activo se puede actualizar vacía para despublicar.",
+          "La web de fuera no muestra los apartados vacíos de la plantilla, enseña las imágenes de la descripción como bloque y, si el enlace está revocado, dice que la lista ya no está disponible.",
+          "Una imagen pegada o soltada en la descripción queda en su propio párrafo, y en el plan para IA y en la Release (.md y .txt) va en su propia línea; en la Release apunta al fichero del ZIP de adjuntos.",
+          "El botón del pie del detalle pasa a «Guardar y cerrar» (con poco ancho, «Guardar»).",
+          "«Nueva tarea» ya no pone el prefijo del tipo en el título cuando el tipo viene solo de «el último usado».",
+          "El aviso «Solo se puede deshacer el último cambio» sale como información (neutro, 6 s) y no en rojo.",
+          "En Ajustes → Miembros, la nota dice dónde está el botón del enlace de invitación.",
+          "El aviso ámbar de «La descripción guardada ha cambiado» sale en vivo también cuando el cambio viene de otra pestaña tuya.",
+          "`npm start` (sin Docker) libera unos 170 MB de memoria tras el arranque."
+        ],
+        "correcciones": [
+          "El «Deshacer» de un aviso propio ya no falla porque lo último de la pila venga de la web de fuera.",
+          "«Descartar cambios» del aviso «Cambios sin guardar» de Mi perfil → Plantillas y de Ajustes del proyecto ya funciona.",
+          "Al quitar a un miembro desaparece su recuadro de invitación.",
+          "La errata «lo que necesitas de mí» de la plantilla del tipo «Respuesta» se corrige si nadie la había cambiado.",
+          "Las descargas y aperturas de la web de fuera aparecen en Logs con «(fuera)».",
+          "Las tareas terminadas ya no cuentan como quitadas de «Compartir fuera»."
+        ],
+        "tecnicos": [
+          "Dos migraciones: `20261204100000_compartir_fuera_revocado_por` (quién revocó) y `20261204110000_respuesta_errata`.",
+          "`ColumnShare.generatedByName` ya no se escribe ni se lee (se quitará en la v1.74).",
+          "Las tareas de arranque de `npm start` corren en un proceso hijo aparte."
+        ]
+      },
+      "en": {
+        "summary": "Clearer “Share outside” (dialog, footer, who revoked, web page with author and thumbnails), pasted images as their own block, “Save and close”, informational notices, fixes to New task, Undo, Members and templates, and `npm start` with less memory",
+        "changes": {
+          "nuevas": [
+            "Clearer “Share outside”: the web dialog shows the address prominently (one click copies it) with “Copy”, “Open” and “Send by email”, says what anyone with the link can do and keeps “Revoke link” apart, with confirmation.",
+            "In “Share outside”, the footer warns “There are unpublished changes” when tasks enter or leave the column, and any project member can revoke the link: the bubble, the footer and the dialog say who revoked it and when.",
+            "The outside page says “Shared by <name> from Pizarro”, shows a thumbnail of image attachments and puts each action’s notice on its task card."
+          ],
+          "mejoras": [
+            "The “Share outside” footer is shorter: a brief notice, the “Link” button in the same color as “Update web” and the expiry as a clock button that cycles through 7 days, 1 month and 3 months.",
+            "An empty column does not generate a web page (“There are no tasks in…”), and with an active link it can be updated empty to unpublish.",
+            "The outside page hides the template’s empty sections, shows description images as a block and, if the link is revoked, says the list is no longer available.",
+            "An image pasted or dropped into the description gets its own paragraph, and in the AI plan and the Release (.md and .txt) it goes on its own line; in the Release it points to the file in the attachments ZIP.",
+            "The detail footer button becomes “Save and close” (“Save” on narrow widths).",
+            "“New task” no longer puts the type prefix in the title when the type comes only from “last used”.",
+            "The “Only the last change can be undone” notice is informational (neutral, 6 s), not red.",
+            "In Settings → Members, the note says where the invitation link button is.",
+            "The amber “The saved description has changed” notice appears live also when the change comes from another tab of yours.",
+            "`npm start` (no Docker) frees about 170 MB of memory after startup."
+          ],
+          "correcciones": [
+            "“Undo” on your own notice no longer fails because the last item in the stack came from the outside page.",
+            "“Discard changes” in the “Unsaved changes” notice of My profile → Templates and project Settings now works.",
+            "Removing a member also removes their invitation box.",
+            "The typo “lo que necesitas de mí” in the “Reply” type template is fixed if nobody had changed it.",
+            "Downloads and opens of the outside page show in Logs with “(outside)”.",
+            "Finished tasks no longer count as removed from “Share outside”."
+          ],
+          "tecnicos": [
+            "Two migrations: `20261204100000_compartir_fuera_revocado_por` (who revoked) and `20261204110000_respuesta_errata`.",
+            "`ColumnShare.generatedByName` is no longer written or read (to be dropped in v1.74).",
+            "The startup tasks of `npm start` run in a separate child process."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.72.0",
       "date": "2026-11-25",
       "releasedAt": "2026-11-25T20:14:44+01:00",

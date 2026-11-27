@@ -2,6 +2,44 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.73.0 — 2026-11-27 01:15
+
+Compartir fuera más claro (diálogo, pie, quién revocó, web con autor y miniaturas), imágenes pegadas como bloque propio, «Guardar y cerrar», avisos informativos, arreglos de Nueva tarea, Deshacer, Miembros y plantillas, y npm start con menos memoria
+
+### Nuevas funcionalidades
+
+- «Compartir fuera» más claro: el diálogo de la web enseña la dirección destacada (un clic la copia) con «Copiar», «Abrir» y «Enviar por email», dice qué puede hacer quien tenga el enlace y deja «Revocar enlace» aparte, con confirmación.
+- En «Compartir fuera», el pie avisa con «Hay cambios sin publicar» cuando entran o salen tareas de la columna, y cualquier miembro del proyecto puede revocar el enlace: el globo, el pie y el diálogo dicen quién lo revocó y cuándo.
+- La web de fuera dice «Compartida por <nombre> desde Pizarro», enseña una miniatura de los adjuntos que son imagen y muestra el aviso de cada acción en la tarjeta de su tarea.
+
+### Mejoras
+
+- El pie de «Compartir fuera» se acorta: un aviso breve, el botón «Link» con el mismo color que «Actualizar web» y la caducidad como botón con reloj que cambia entre 7 días, 1 mes y 3 meses.
+- Una columna vacía no genera web («No hay tareas en…»), y con un enlace activo se puede actualizar vacía para despublicar.
+- La web de fuera no muestra los apartados vacíos de la plantilla, enseña las imágenes de la descripción como bloque y, si el enlace está revocado, dice que la lista ya no está disponible.
+- Una imagen pegada o soltada en la descripción queda en su propio párrafo, y en el plan para IA y en la Release (.md y .txt) va en su propia línea; en la Release apunta al fichero del ZIP de adjuntos.
+- El botón del pie del detalle pasa a «Guardar y cerrar» (con poco ancho, «Guardar»).
+- «Nueva tarea» ya no pone el prefijo del tipo en el título cuando el tipo viene solo de «el último usado».
+- El aviso «Solo se puede deshacer el último cambio» sale como información (neutro, 6 s) y no en rojo.
+- En Ajustes → Miembros, la nota dice dónde está el botón del enlace de invitación.
+- El aviso ámbar de «La descripción guardada ha cambiado» sale en vivo también cuando el cambio viene de otra pestaña tuya.
+- `npm start` (sin Docker) libera unos 170 MB de memoria tras el arranque.
+
+### Correcciones
+
+- El «Deshacer» de un aviso propio ya no falla porque lo último de la pila venga de la web de fuera.
+- «Descartar cambios» del aviso «Cambios sin guardar» de Mi perfil → Plantillas y de Ajustes del proyecto ya funciona.
+- Al quitar a un miembro desaparece su recuadro de invitación.
+- La errata «lo que necesitas de mí» de la plantilla del tipo «Respuesta» se corrige si nadie la había cambiado.
+- Las descargas y aperturas de la web de fuera aparecen en Logs con «(fuera)».
+- Las tareas terminadas ya no cuentan como quitadas de «Compartir fuera».
+
+### Cambios técnicos / DB
+
+- Dos migraciones: `20261204100000_compartir_fuera_revocado_por` (quién revocó) y `20261204110000_respuesta_errata`.
+- `ColumnShare.generatedByName` ya no se escribe ni se lee (se quitará en la v1.74).
+- Las tareas de arranque de `npm start` corren en un proceso hijo aparte.
+
 ## v1.72.0 — 2026-11-25 20:14
 
 Columna «Compartir fuera» con una web sin cuenta para proveedores y clientes, imágenes pegadas dentro de la descripción, avisos con «Deshacer» que no confunden, guía de Railway en una sola página con ayuda de una IA, plan para IA más corto, imagen más ligera, y revisión y caza de bugs
