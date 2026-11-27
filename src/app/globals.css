@@ -642,10 +642,10 @@ body:has(> [data-pz-modal] ~ [data-pz-modal][data-pz-side="center"]) > button[da
 /*
  * iOS Safari hace zoom al enfocar un campo con menos de 16 px y no vuelve solo. En móvil táctil, los campos de texto
  * (inputs, selects, textareas y el editor de las descripciones) se quedan en 16 px. Va fuera de las capas de Tailwind
- * para ganar a las utilidades `text-sm`/`text-xs` de cada campo; las casillas, rangos y colores no escriben texto.
+ * para ganar a las utilidades `text-sm`/`text-xs` de cada campo; las casillas, rangos y colores no escriben texto. Los que ya miden 16 px o más (`text-base`…`text-3xl`, p. ej. el título del detalle) no se tocan.
  */
 @media (max-width: 639px) and (pointer: coarse) {
-  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), select, textarea, [contenteditable]:not([contenteditable="false"])) {
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), select, textarea, [contenteditable]:not([contenteditable="false"])):not(.text-base, .text-lg, .text-xl, .text-2xl, .text-3xl) {
     font-size: 16px;
   }
 }

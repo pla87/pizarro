@@ -763,6 +763,18 @@ describe("importar: personas", () => {
     assert.equal(task.kindId, own[0]!.id);
     assert.ok(s.warnings.some((w) => w.includes(general.name) && w.includes("(2)")));
   });
+
+  test("un tipo renombrado no se funde con otro tipo del archivo que ya se llama como el nuevo nombre", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const general = await makeKind(null);
+    const mk = (ref: string, name: string) => ({ ref, name, color: "#3b82f6", position: 1, titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [], scope: "project" as const });
+    const data = minimal([{ kindRef: "k1" }], { kinds: [mk("k1", general.name), mk("k2", `${general.name} (2)`)] });
+    const s = await importProjectFile(await craft(data), asImporter(admin), { isPrivate: false });
+    const own = await db.taskKind.findMany({ where: { projectId: s.projectId } });
+    assert.equal(own.length, 2);
+    assert.equal(new Set(own.map((k) => k.name.toLowerCase())).size, 2);
+    assert.ok(own.some((k) => k.name === `${general.name} (2)`));
+  });
 });
 
 describe("permisos", () => {

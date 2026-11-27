@@ -430,7 +430,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span>{jobLabel(t, j.name)}</span>
                   <span className="flex items-center gap-2 text-slate-500">
-                    {j.lastStartedAt && formatDate(j.lastStartedAt, "dateTime", locale)}
+                    {(j.lastOk === false ? j.lastFinishedAt ?? j.lastStartedAt : j.lastStartedAt) && formatDate((j.lastOk === false ? j.lastFinishedAt ?? j.lastStartedAt : j.lastStartedAt)!, "dateTime", locale)}
                     <span className={j.lastOk === false ? "badge bg-red-50 text-red-700 ring-red-500/20" : skipped ? "badge bg-amber-50 text-amber-800 ring-amber-500/20" : j.lastOk ? "badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" : "badge bg-slate-50 text-slate-600 ring-slate-500/20"}>
                       {j.lastOk === false ? t("Con error") : skipped ?? (j.lastOk ? t("Correcta") : t("En curso"))}
                     </span>

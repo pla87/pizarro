@@ -176,21 +176,21 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const description = d?.description ?? initialDescription ?? "";
     const subtasks = d?.subtasks ?? [];
     const kind = d ? undefined : board.kinds.find((k) => k.id === kindId);
-    if (!kind) return { kindId, title, description, subtasks, templated: false };
+    if (!kind) return { kindId, title, description, subtasks, templated: false, prefixSkipped: true };
     const next = switchKindText(null, kind, { title, description, subtasks });
     // Lo compartido trae su título: el del tipo no lo sustituye. Tampoco el tipo que solo viene de «el último usado» (o del
     // primero de la lista): su prefijo («Comprar », «Obra: ») se ponía en cualquier «Nueva tarea» sin que nadie lo pidiera.
     // Solo lo pone el tipo por defecto de la columna o el que la persona elige a mano.
     if (initialTitle?.trim() || !columnKind) next.title = title;
     const changed = next.title !== title || next.description !== description || next.subtasks.length !== subtasks.length;
-    return { kindId, ...next, templated: changed && initialTitle === undefined };
+    return { kindId, ...next, templated: changed && initialTitle === undefined, prefixSkipped: !!initialTitle?.trim() || !columnKind };
   });
   const [title, setTitle] = useState(init.title);
   const [kindId, setKindId] = useState(init.kindId);
   // Se eligió el tipo a mano: cambiar de columna ya no lo sustituye por el tipo por defecto de la columna. El de un borrador
   // recuperado cuenta como elegido: antes, al cambiar de columna, pasaba en silencio al de la columna (y su prefijo).
   // El tipo actual no puso su prefijo en el título (vino de «el último usado»): al cambiarlo luego no se quita como si lo hubiera puesto Pizarro.
-  const prefixSkipped = useRef(!foreignInit && !d && !columnDefaultKind(board, initialColumnId ?? board.columns[0]?.id ?? ""));
+  const prefixSkipped = useRef(init.prefixSkipped);
   const kindPicked = useRef(!foreignInit && !!d && board.kindById.has(d.kindId));
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? columnPerson(board, columnId)?.id ?? ""));

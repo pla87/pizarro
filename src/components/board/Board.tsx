@@ -1268,6 +1268,9 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     }
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
     setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
+    // Las que el servidor no ha movido (archivadas o borradas mientras tanto) vuelven a como estaban; el refresco las quita.
+    const skipped = new Map([...before].filter(([id]) => !server.has(id)));
+    if (skipped.size) restoreTasks(skipped);
     res.data.spawned.forEach(upsertTask);
     for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
     if (assignedNotice(res.data.assigned, res.data.undo.id, res.data.moved.length)) return;
