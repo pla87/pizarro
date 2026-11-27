@@ -227,6 +227,9 @@ test("insertImageBlocks: la imagen pegada va en su propio párrafo (partiendo el
   assert.equal(end.tr.selection.$from.parent, last);
   // En medio, el cursor queda al principio del trozo de detrás.
   assert.equal(run("Holamundo", 5).tr.selection.$from.parent.textContent, "mundo");
+  // Los espacios del borde donde se parte no pasan al Markdown.
+  assert.equal(run("Antes despues", 7).md, "Antes\n\n![a](/api/attachments/x1)\n\ndespues");
+  assert.equal(run("Antes  despues", 7).md, "Antes\n\n![a](/api/attachments/x1)\n\ndespues");
   // Una descripción ya guardada con la imagen dentro del párrafo se sigue leyendo igual.
   assert.equal(saved("Mira la tabla.![a](/api/attachments/x1)"), "Mira la tabla.![a](/api/attachments/x1)");
 });

@@ -9,6 +9,7 @@ import { MAX_BULK_TASKS, parseTaskLinesInfo } from "@/lib/bulk";
 import { parseTasksText } from "@/lib/task-json";
 import { useT } from "@/i18n/client";
 import { DictationButton, insertIntoField } from "../ui/DictationButton";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
@@ -36,6 +37,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   const board = useBoard();
   const toast = useToast();
   const t = useT();
+  const confirm = useConfirm();
   const router = useRouter();
   // Proyecto en el que se crea: el abierto, o el elegido (con las opciones que pide el servidor y se guardan mientras siga abierto).
   const [projectId, setProjectId] = useState(board.project.id);
@@ -172,6 +174,21 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     if (!elsewhere && res.data[0]) board.revealTask(res.data[0].id);
   };
 
+  // Con la lista escrita, cerrar (Escape, clic fuera, X o «Cancelar») pide confirmación; mientras se crea, no se cierra.
+  const confirming = useRef(false);
+  const requestClose = async (): Promise<boolean> => {
+    if (busy) return false;
+    if (text.trim()) {
+      if (confirming.current) return false;
+      confirming.current = true;
+      const ok = await confirm({ title: t("Descartar la nueva tarea"), message: t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"), confirmLabel: t("Descartar"), danger: true }).catch(() => false);
+      confirming.current = false;
+      if (!ok) return false;
+    }
+    onClose();
+    return true;
+  };
+
   const label = !lines.length
     ? t("Crear tareas")
     : tooMany
@@ -185,7 +202,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={requestClose}
       side={side}
       title={
         <span className="-m-1 flex min-w-0 items-center gap-2 p-1">
@@ -199,7 +216,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
       topOnDesktop
       footer={
         <>
-          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button type="button" className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
           <button type="submit" form="bulk-tasks" className="btn-primary" disabled={busy || loading || !lines.length || tooMany || missingKind}>
             {busy && <Loader2 size={16} className="animate-spin" />} {label}
           </button>

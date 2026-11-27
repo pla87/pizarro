@@ -137,7 +137,11 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
     setDialog({ url: res.data.url, lost: res.data.lost });
   };
 
+  // Un solo cambio de caducidad a la vez: clics rápidos lanzaban varios y el botón podía mostrar otra cosa que lo guardado.
+  const [cycling, setCycling] = useState(false);
   const cycle = async () => {
+    if (cycling) return;
+    setCycling(true);
     const next = nextShareExpiry(days);
     if (info) apply({ ...info, expiryDays: next });
     const res = await track(setShareExpiry(column.id, next));
@@ -145,6 +149,7 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
       if (info) apply(info);
       toast(res.error, "error");
     } else apply(res.data);
+    setCycling(false);
   };
 
   const label = shareExpiryLabel(days);
@@ -183,10 +188,11 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
       <button
         type="button"
         data-share-expiry={days}
+        aria-busy={cycling || undefined}
         onClick={() => void cycle()}
         aria-label={t("Caduca tras {label} sin uso: pulsa para cambiarlo", { label: t(label) })}
         title={t("Caduca tras {label} sin uso: pulsa para cambiarlo", { label: t(label) })}
-        className="btn-secondary w-full justify-center px-2 py-1 text-xs"
+        className="btn-secondary w-full justify-center px-2 py-1 text-xs aria-busy:cursor-progress"
       >
         <Clock size={13} aria-hidden /> {t("Caduca tras {label} sin uso", { label: t(label) })}
       </button>
