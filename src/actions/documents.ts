@@ -3,8 +3,10 @@
 import { z } from "zod";
 import { describeAction } from "@/lib/action-context";
 import { runAction } from "@/lib/action";
-import { deleteTrashedDocumentRow, renameDocumentRow, restoreDocumentRow, trashDocumentRow } from "@/lib/documents";
-import { sanitizeDocumentName } from "@/lib/document-kind";
+import { assertProjectAccess } from "@/lib/access";
+import { createNoteRow, deleteTrashedDocumentRow, getNoteForUser, renameDocumentRow, restoreDocumentRow, saveNoteRow, searchNoteIds, setDocumentPinnedRow, trashDocumentRow } from "@/lib/documents";
+import { NOTE_MAX_CHARS, sanitizeDocumentName } from "@/lib/document-kind";
+import { getT } from "@/i18n/server";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 
@@ -45,5 +47,65 @@ export async function renameDocument(documentId: string, name: string) {
     const before = await renameDocumentRow(user, v.id.parse(documentId), clean);
     describeAction("Renombró un documento a «{name}»", { name: before.name }, { documentId: before.id });
     return { name: clean };
+  });
+}
+
+// --- Notas escritas en la app y documentos fijados -----------------------------------------------------------------
+
+/** Crea una nota vacía («Nota sin título») en la Documentación del proyecto, con los mismos límites que una subida. */
+export async function createNote(projectId: string) {
+  return runAction({ name: "documents.createNote", args: [projectId] }, async () => {
+    const user = await requireUser();
+    const id = v.id.parse(projectId);
+    await assertProjectAccess(user, id);
+    const t = await getT();
+    const doc = await createNoteRow(user, id, t("Nota sin título"));
+    describeAction("Creó la nota «{name}»", { name: doc.name }, { documentId: doc.id });
+    return doc;
+  });
+}
+
+/** Texto y versión de una nota (para abrirla en el visor o en el editor). */
+export async function getNote(documentId: string) {
+  return runAction({ name: "documents.getNote", args: [documentId] }, async () => {
+    const user = await requireUser();
+    const note = await getNoteForUser(user, v.id.parse(documentId));
+    return { content: note.content, version: note.version, trashed: note.trashed };
+  });
+}
+
+/**
+ * Guarda el texto de una nota (guardado automático del editor). `baseVersion`: la versión que conocía el editor; si
+ * otra persona la cambió entretanto no se guarda y vuelve su versión (`status: "conflict"`). Cuando sale bien no deja
+ * rastro en Logs (se guarda cada pocos segundos mientras se escribe) ni avisa a las pestañas del tablero.
+ */
+export async function saveNote(documentId: string, content: string, baseVersion: number) {
+  // En el registro, solo el tamaño del texto (no el texto entero en cada fallo).
+  return runAction({ name: "documents.saveNote", args: [documentId, `${String(content).length}`, baseVersion] }, async () => {
+    const user = await requireUser();
+    // El tope de caracteres lo da saveNoteRow con su propio mensaje; aquí solo se corta lo desmesurado.
+    const text = z.string().max(NOTE_MAX_CHARS * 2).parse(content);
+    return saveNoteRow(user, v.id.parse(documentId), text, z.number().int().min(0).parse(baseVersion));
+  });
+}
+
+/** Fija un documento arriba en la lista de Documentación («Notas generales») o lo quita de ahí. */
+export async function setDocumentPinned(documentId: string, pinned: boolean) {
+  return runAction({ name: "documents.setDocumentPinned", args: [documentId, pinned] }, async () => {
+    const user = await requireUser();
+    const on = z.boolean().parse(pinned);
+    const doc = await setDocumentPinnedRow(user, v.id.parse(documentId), on);
+    if (on) describeAction("Fijó «{name}» arriba en Documentación", { name: doc.name }, { documentId: doc.id });
+    else describeAction("Quitó «{name}» de los fijados de Documentación", { name: doc.name }, { documentId: doc.id });
+  });
+}
+
+/** Ids de las notas del proyecto cuyo texto contiene `q` (el nombre ya lo filtra el navegador). */
+export async function searchNotes(projectId: string, q: string) {
+  return runAction({ name: "documents.searchNotes", args: [projectId, q] }, async () => {
+    const user = await requireUser();
+    const id = v.id.parse(projectId);
+    await assertProjectAccess(user, id);
+    return searchNoteIds(id, z.string().max(200).parse(q));
   });
 }

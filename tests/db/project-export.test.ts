@@ -439,6 +439,62 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
   });
 });
 
+describe("exportar e importar: notas de Documentación", () => {
+  test("una nota va como .md marcado y vuelve como nota, con sus menciones, sus imágenes de Documentación y fijada", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const member = await makeUser({ name: "Carla Notas" });
+    const f = await makeProject({ members: [admin, member] });
+    const img = await webp();
+    const image = await db.projectDocument.create({ data: { projectId: f.project.id, name: "captura.webp", mimeType: "image/webp", size: img.length, kind: "IMAGE", createdById: admin.id } });
+    await saveDocumentFile(image.id, img);
+    const text = `# Acta\n\nHabla @[Carla Notas](user:${member.id}).\n\n![captura](/api/documents/${image.id})`;
+    await db.projectDocument.create({
+      data: { projectId: f.project.id, name: "Acta", mimeType: "text/markdown", size: Buffer.byteLength(text), kind: "MARKDOWN", createdById: admin.id, noteContent: text, noteVersion: 7, pinnedAt: new Date("2026-03-04T05:06:07Z") },
+    });
+    await db.projectDocument.create({
+      data: { projectId: f.project.id, name: "Borrador", mimeType: "text/markdown", size: 3, kind: "MARKDOWN", createdById: admin.id, noteContent: "old", deletedAt: new Date(), deletedById: admin.id },
+    });
+
+    const built = await buildProjectExport(f.project.id, { attachments: true, scope: "board" }, ADMIN_EXPORT);
+    const data = projectJsonOf(built);
+    projectDataSchema.parse(data);
+    const exported = data.documents.find((d) => d.name === "Acta")!;
+    const imageRef = data.documents.find((d) => d.name === "captura.webp")!.ref;
+    assert.equal(exported.note, true);
+    assert.equal(exported.pinnedAt, "2026-03-04T05:06:07.000Z");
+    assert.equal(data.documentsTrash?.find((d) => d.name === "Borrador")?.note, true);
+    // En el archivo, el texto lleva refs (ni el id de la persona ni el del documento).
+    const fileEntry = built.entries.find((e) => e.name === `files/${exported.file}`)!;
+    const body = Buffer.isBuffer(fileEntry.body) ? fileEntry.body : Buffer.concat(await Array.fromAsync(fileEntry.body(), (c) => Buffer.from(c)));
+    const exportedText = body.toString("utf8");
+    assert.ok(!exportedText.includes(member.id) && !exportedText.includes(image.id), exportedText);
+    assert.match(exportedText, new RegExp(`/api/documents/${imageRef}\\)`));
+
+    const s = await importProjectFile(await writeExport(built), asImporter(admin), { isPrivate: false });
+    const docs = await db.projectDocument.findMany({ where: { projectId: s.projectId } });
+    const imported = docs.find((d) => d.name === "Acta")!;
+    const importedImage = docs.find((d) => d.name === "captura.webp")!;
+    assert.equal(imported.noteContent, `# Acta\n\nHabla @[Carla Notas](user:${member.id}).\n\n![captura](/api/documents/${importedImage.id})`);
+    assert.equal(imported.size, Buffer.byteLength(imported.noteContent!));
+    assert.equal(imported.pinnedAt?.toISOString(), "2026-03-04T05:06:07.000Z");
+    assert.equal(imported.noteVersion, 0);
+    // Sin fichero en el disco para las notas; la imagen sí.
+    await assert.rejects(stat(documentPath(imported.id)));
+    assert.ok((await stat(documentPath(importedImage.id))).size > 0);
+    const back = docs.find((d) => d.name === "Borrador")!;
+    assert.deepEqual([back.noteContent, !!back.deletedAt], ["old", true]);
+
+    // Una versión anterior sin la marca `note` la importa como un .md subido (es lo que hace la v1.75 con el archivo nuevo).
+    const at = "2026-01-02T03:04:05.000Z";
+    const md = Buffer.from("# Hola");
+    const old = minimal([], { documents: [{ ref: "x1", name: "leeme", mimeType: "text/markdown", size: md.length, kind: "MARKDOWN", createdBy: null, createdAt: at, updatedAt: at, file: sha(md) }] });
+    const s2 = await importProjectFile(await craft(old, [md]), asImporter(admin), { isPrivate: true });
+    const plain = await db.projectDocument.findFirstOrThrow({ where: { projectId: s2.projectId } });
+    assert.equal(plain.noteContent, null);
+    assert.equal((await readFile(documentPath(plain.id))).toString(), "# Hola");
+  });
+});
+
 describe("importación cortada por un reinicio", () => {
   test("mientras dura, su registro anota cada fichero antes de escribirlo; al terminar desaparece", async () => {
     const { admin, projectId } = await richProject();

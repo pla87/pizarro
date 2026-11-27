@@ -10,7 +10,7 @@ import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB, effectiveFileMaxMb } from "../upload-
 import { RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants";
 import { isoToDate, todayIso } from "../dates";
 import { db } from "../db";
-import { confirmDocumentKind, documentMime, sanitizeDocumentName } from "../document-kind";
+import { confirmDocumentKind, documentMime, looksLikeText, NOTE_MAX_CHARS, noteBytes, sanitizeDocumentName } from "../document-kind";
 import { assertDiskRoom, releaseDisk, reserveDisk } from "../disk-space";
 import { cleanFileName } from "../file-name";
 import { AppError, forbidden } from "../errors";
@@ -35,7 +35,7 @@ import { uploadDir } from "../upload-dir";
 import { isShuttingDown } from "../shutdown";
 import { INTERRUPTED_MESSAGE } from "./errors";
 import { openImportJournal } from "./import-journal";
-import { remapAttachmentRefs } from "../attachment-refs";
+import { remapAttachmentRefs, remapDocumentRefs } from "../attachment-refs";
 import { releaseFloorFromImport, retireReleaseNumber } from "../release-number";
 import { mapMentions } from "./mentions";
 import { openProjectArchive, type ProjectArchive } from "./read";
@@ -361,7 +361,10 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
     }
 
     const documentRows: Prisma.ProjectDocumentCreateManyInput[] = [];
-    const docs: (ProjectExportData["documents"][number] & { deletedAt?: string; deletedBy?: string | null })[] = [...data.documents, ...trash];
+    // Las notas, al final: su texto puede citar imágenes de la Documentación (`/api/documents/<ref>`), que así ya tienen id.
+    const docs: (ProjectExportData["documents"][number] & { deletedAt?: string; deletedBy?: string | null })[] = [...data.documents, ...trash]
+      .sort((a, b) => Number(!!a.note) - Number(!!b.note));
+    const documentIds = new Map<string, string>();
     for (const d of docs) {
       fileStart();
       if (tooBig(d.name, d.file)) continue;
@@ -369,6 +372,22 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
       const id = newId();
       const buf = await loadFile(d.file);
       const name = sanitizeDocumentName(d.name);
+      const common = {
+        id, projectId, name, createdById: uid(d.createdBy), createdAt: date(d.createdAt), updatedAt: date(d.updatedAt),
+        // En la papelera: conserva cuándo se borró (se purga a los mismos días que en el origen) y quién.
+        ...(d.deletedAt ? { deletedAt: date(d.deletedAt), deletedById: uid(d.deletedBy ?? null) } : { pinnedAt: d.pinnedAt ? date(d.pinnedAt) : null }),
+      };
+      // Una nota vuelve a ser nota (texto en la fila, sin fichero) si es texto UTF-8 dentro del máximo; si no, entra como un .md subido.
+      const noteText = d.note && looksLikeText(buf) ? buf.toString("utf8") : null;
+      if (noteText !== null && noteText.length <= NOTE_MAX_CHARS) {
+        const content = remapDocumentRefs(text(noteText), documentIds);
+        const size = noteBytes(content);
+        documentIds.set(d.ref, id);
+        writtenBytes += size;
+        assertRoom(0);
+        documentRows.push({ ...common, mimeType: "text/markdown", size, kind: "MARKDOWN", noteContent: content });
+        continue;
+      }
       let kind = confirmDocumentKind(d.kind, buf);
       let stored: Buffer = buf;
       if (kind === "IMAGE") {
@@ -383,14 +402,10 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
       await journal.record("d", id);
       await saveDocumentFile(id, stored);
       written.documents.push(id);
+      documentIds.set(d.ref, id);
       writtenBytes += stored.length;
       assertRoom(0);
-      documentRows.push({
-        id, projectId, name, mimeType: documentMime(kind, sanitizeMime(d.mimeType)), size: stored.length, kind, createdById: uid(d.createdBy),
-        createdAt: date(d.createdAt), updatedAt: date(d.updatedAt),
-        // En la papelera: conserva cuándo se borró (se purga a los mismos días que en el origen) y quién.
-        ...(d.deletedAt ? { deletedAt: date(d.deletedAt), deletedById: uid(d.deletedBy ?? null) } : {}),
-      });
+      documentRows.push({ ...common, mimeType: documentMime(kind, sanitizeMime(d.mimeType)), size: stored.length, kind });
     }
 
     // --- Base de datos: todo o nada.

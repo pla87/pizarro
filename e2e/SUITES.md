@@ -556,6 +556,21 @@ marco la página de la app y quedaba un error), y lo que se pinta no lleva `ping
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-enlaces-e2e.mjs   # PART=enlaces,codificacion,propio,binario,indice
 ```
 
+### Notas de Documentación
+
+`e2e/documentacion-notas-e2e.mjs` (v1.76). «Nueva nota» abre una «Nota sin título» en modo edición con el foco en el
+texto; lo escrito se guarda solo al dejar de escribir (el indicador dice «Guardado» y el texto está en la fila, sin
+fichero) y el lápiz del visor le cambia el título. Tras recargar se ve pintada, y lo escrito justo antes de cerrar el visor
+también llega. «Fijar en «Notas generales»» (menú ⋯) la sube a esa sección y el botón del visor la quita. El buscador la
+encuentra por una palabra de su texto sin tildes ni mayúsculas («CANCION» → «Canción») y no por otra. Dos pestañas
+editando a la vez: la segunda recibe «Otra persona ha cambiado esta nota…», ve la versión de la otra y «Quedarme con la
+mía» guarda la suya sin pisar nada antes. Con el editor con barra (modo visual) también se guarda. Enviarla a la papelera
+desde ⋯ la quita de la lista; en la papelera se ve su texto y se restaura. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-notas-e2e.mjs   # PART=recargar,fijar,buscar,conflicto,visual,papelera (crear va siempre)
+```
+
 ## Cuentas
 
 ### Borrar mi cuenta

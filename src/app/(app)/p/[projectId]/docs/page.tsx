@@ -3,6 +3,7 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { DOCUMENTS_MAX_PER_PROJECT } from "@/lib/document-kind";
 import { listProjectDocumentsOf, listTrashedDocumentsOf } from "@/lib/documents";
+import { projectUsers } from "@/lib/board";
 import { requireUserPage } from "@/lib/session";
 import { effectiveFileMaxMb } from "@/lib/upload-size";
 import { getT } from "@/i18n/server";
@@ -19,13 +20,15 @@ export default async function ProjectDocsPage({ params, searchParams }: { params
   const { projectId } = await params;
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
-    select: { id: true, name: true, fileMaxMb: true },
+    select: { id: true, name: true, fileMaxMb: true, isPrivate: true },
   });
   if (!project) notFound();
-  const [documents, trashed, me, { doc }] = await Promise.all([
+  const [documents, trashed, me, users, { doc }] = await Promise.all([
     listProjectDocumentsOf(project.id),
     listTrashedDocumentsOf(project.id),
     db.user.findUniqueOrThrow({ where: { id: user.id }, select: { editorMode: true } }),
+    // Para las menciones del editor de notas (las mismas personas que en las tareas del proyecto).
+    projectUsers(project.id, project),
     searchParams,
   ]);
 
@@ -39,6 +42,7 @@ export default async function ProjectDocsPage({ params, searchParams }: { params
       maxCount={DOCUMENTS_MAX_PER_PROJECT}
       currentUserId={user.id}
       editorMode={me.editorMode}
+      users={users}
       initialOpenId={typeof doc === "string" && documents.some((d) => d.id === doc) ? doc : null}
       // Solo se mira en los documentos de ESTE proyecto: un id de otro proyecto es «ya no está», sin más pistas.
       linkNotice={typeof doc === "string" && doc && !documents.some((d) => d.id === doc) ? (trashed.some((d) => d.id === doc) ? "trashed" : "gone") : null}

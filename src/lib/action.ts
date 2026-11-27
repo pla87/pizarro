@@ -33,9 +33,10 @@ const ECHO_SAFE_ACTIONS = new Set([
  * Acciones que solo cambian datos personales de quien las lanza (nada que se vea en el tablero de los demás): se
  * registran como las demás, pero no se avisa a las otras pestañas del proyecto (cada aviso las haría recargar). También
  * las que no cambian nada del tablero aunque se registren: abrir el enlace de «Compartir fuera» (shareOut.getLink) solo
- * descifra la dirección para el diálogo.
+ * descifra la dirección para el diálogo. Y el guardado automático de una nota de Documentación (documents.saveNote):
+ * el tablero no la enseña y cada pocos segundos haría recargar las pestañas.
  */
-const UNPUBLISHED_ACTIONS: ReadonlySet<string> = new Set(["tasks.setTaskFollowing", "shareOut.getLink"]);
+const UNPUBLISHED_ACTIONS: ReadonlySet<string> = new Set(["tasks.setTaskFollowing", "shareOut.getLink", "documents.saveNote"]);
 
 /** `cid`: id del cambio publicado a las demás pestañas (solo en acciones que cambian datos de un proyecto). */
 /** `code`: el de un AppError que lo lleve, para que la pantalla distinga un fallo concreto (p. ej. `edit_conflict`). */
@@ -47,8 +48,11 @@ interface ActionMeta {
   args?: ArrayLike<unknown>;
 }
 
-/** Consultas que no se anotan en el registro cuando salen bien (los errores sí): abrir una tarea o desplegar una release del histórico. */
-const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments", "tasks.getRecentComments", "releases.getReleaseContent", "changelog.getOlderVersions"]);
+/**
+ * Consultas que no se anotan en el registro cuando salen bien (los errores sí): abrir una tarea o desplegar una release del
+ * histórico, abrir o buscar notas. También el guardado automático de una nota, que se repite mientras se escribe.
+ */
+const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments", "tasks.getRecentComments", "releases.getReleaseContent", "changelog.getOlderVersions", "documents.getNote", "documents.searchNotes", "documents.saveNote"]);
 
 /** Ejecuta una acción, la registra en los logs y convierte los errores en un resultado serializable. */
 export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T>>;

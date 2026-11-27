@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { test } from "node:test";
-import { remapAttachmentRefs } from "../src/lib/attachment-refs";
+import { remapAttachmentRefs, remapDocumentRefs } from "../src/lib/attachment-refs";
 
 test("cambia los ids que están en el mapa y deja los demás", () => {
   const map = new Map([["c1a", "c9z"], ["abc", "def"]]);
@@ -21,17 +21,29 @@ test("sin mapa o sin enlaces devuelve el mismo texto", () => {
   assert.equal(remapAttachmentRefs("![x](/api/attachments/a)", new Map()), "![x](/api/attachments/a)");
 });
 
+test("remapDocumentRefs: las imágenes de Documentación de una nota apuntan a los documentos importados", () => {
+  const map = new Map([["x1", "cnew1"], ["x2", "cnew2"]]);
+  assert.equal(
+    remapDocumentRefs("![a](/api/documents/x1) ![b](/api/documents/x2?download=1) ![c](/api/documents/x10) ![d](/api/attachments/x1)", map),
+    "![a](/api/documents/cnew1) ![b](/api/documents/cnew2?download=1) ![c](/api/documents/x10) ![d](/api/attachments/x1)",
+  );
+  assert.equal(remapDocumentRefs("sin enlaces", map), "sin enlaces");
+});
+
 // Imágenes de Markdown: solo se pintan las de un adjunto de la app, con la ruta fija. Comprobar solo el prefijo dejaba
 // pasar `/api/attachments/../auth/reset`, que el navegador normaliza y pide desde el mismo origen (cerraba la sesión de
 // quien abría la tarea) o cualquier otro GET de la app (informes, ZIP de una versión).
-const EVIL = ["/api/attachments/../auth/reset", "/api/attachments/%2e%2e/auth/reset", "/api/attachments/%2E%2E/auth/reset", "/api/attachments/..%2fauth/reset"];
+const EVIL = [
+  "/api/attachments/../auth/reset", "/api/attachments/%2e%2e/auth/reset", "/api/attachments/%2E%2E/auth/reset", "/api/attachments/..%2fauth/reset",
+  "/api/documents/../auth/reset", "/api/documents/%2e%2e/auth/reset", "/api/documents/..%2fauth/reset",
+];
 
 test("isAttachmentSrc: solo /api/attachments/<id>, sin consulta o con ?thumb=1", async () => {
   const { isAttachmentSrc } = await import("../src/lib/attachment-refs");
-  for (const ok of ["/api/attachments/abc", "/api/attachments/cmabc123xyz0000def456ghi7", "/api/attachments/abc?thumb=1", "/api/attachments/a_b-c"]) {
+  for (const ok of ["/api/attachments/abc", "/api/attachments/cmabc123xyz0000def456ghi7", "/api/attachments/abc?thumb=1", "/api/attachments/a_b-c", "/api/documents/cmabc123xyz0000def456ghi7"]) {
     assert.equal(isAttachmentSrc(ok), true, ok);
   }
-  for (const bad of [...EVIL, "/api/attachments/a/b", "/api/attachments/", "/api/attachments", "//x", "//example.com/api/attachments/abc", "https://example.com/api/attachments/abc", "/api/attachments/abc#x", "/api/attachments/abc/", " /api/attachments/abc", "/api/attachments/abc\n", "/api/attachments/abc?download=1", "/api/attachments/abc?thumb=1&download=1", "/api/attachments/abc?download=1&thumb=1", "/api/attachments/abc?thumb=2", "/api/attachments/abc?", `/api/attachments/${"a".repeat(41)}`, null, undefined, 1]) {
+  for (const bad of [...EVIL, "/api/attachments/a/b", "/api/attachments/", "/api/attachments", "//x", "//example.com/api/attachments/abc", "https://example.com/api/attachments/abc", "/api/attachments/abc#x", "/api/attachments/abc/", " /api/attachments/abc", "/api/attachments/abc\n", "/api/attachments/abc?download=1", "/api/attachments/abc?thumb=1&download=1", "/api/attachments/abc?download=1&thumb=1", "/api/attachments/abc?thumb=2", "/api/attachments/abc?", `/api/attachments/${"a".repeat(41)}`, "/api/documents/abc?download=1", "/api/documents/abc?thumb=1", "/api/documents/a/b", "/api/documents/", `/api/documents/${"a".repeat(41)}`, null, undefined, 1]) {
     assert.equal(isAttachmentSrc(bad), false, JSON.stringify(bad));
   }
 });

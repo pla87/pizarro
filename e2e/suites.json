@@ -393,6 +393,19 @@
       "src/app/api/documents/**",
       "src/app/api/projects/[projectId]/documents/**"
     ],
+    "documentacion-notas-e2e": [
+      "src/components/docs/**",
+      "src/components/ui/DescriptionField.tsx",
+      "src/components/ui/LazyMarkdown.tsx",
+      "src/components/board/draft-storage.ts",
+      "src/actions/documents.ts",
+      "src/lib/documents.ts",
+      "src/lib/document-kind.ts",
+      "src/lib/attachment-refs.ts",
+      "src/lib/search-accents.ts",
+      "src/app/(app)/p/[projectId]/docs/**",
+      "src/app/api/documents/**"
+    ],
     "cuentas-borrar-e2e": [
       "src/actions/profile.ts",
       "src/actions/users.ts",
