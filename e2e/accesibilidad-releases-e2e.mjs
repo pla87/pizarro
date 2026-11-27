@@ -320,7 +320,8 @@ if (only.includes("borrar")) {
   await docMore.tap();
   const docMenu = mp.getByRole("menu", { name: `Más acciones de «${longName}»` });
   await docMenu.waitFor();
-  L.eq("DOCS: el menú tiene «Descargar» y «Enviar a la papelera»", (await docMenu.getByRole("menuitem").allInnerTexts()).map((x) => x.trim()), ["Descargar", "Enviar a la papelera"]);
+  // (v1.76) Entre las dos, «Fijar en «Notas generales»».
+  L.eq("DOCS: el menú tiene «Descargar», «Fijar en «Notas generales»» y «Enviar a la papelera»", (await docMenu.getByRole("menuitem").allInnerTexts()).map((x) => x.trim()), ["Descargar", "Fijar en «Notas generales»", "Enviar a la papelera"]);
   const menuBox = await docMenu.boundingBox();
   L.check("DOCS 390 px: el menú cabe en la pantalla", menuBox.x >= 0 && menuBox.x + menuBox.width <= 390, JSON.stringify(menuBox));
   const [dl] = await Promise.all([mp.waitForEvent("download", { timeout: 15000 }), docMenu.getByRole("menuitem", { name: "Descargar" }).tap()]);
@@ -331,7 +332,8 @@ if (only.includes("borrar")) {
   await mp.keyboard.press("Enter");
   await docMenu.waitFor();
   await mp.keyboard.press("ArrowDown");
-  L.eq("DOCS: ↓ llega a «Enviar a la papelera»", await mp.evaluate(() => document.activeElement?.textContent?.trim()), "Enviar a la papelera");
+  await mp.keyboard.press("ArrowDown");
+  L.eq("DOCS: ↓ ↓ llega a «Enviar a la papelera»", await mp.evaluate(() => document.activeElement?.textContent?.trim()), "Enviar a la papelera");
   await mp.keyboard.press("Enter");
   await L.eqEventually("DOCS: va a la papelera", async () => (await L.q(`SELECT count(*)::int n FROM "ProjectDocument" WHERE "projectId"=$1 AND name=$2 AND "deletedAt" IS NOT NULL`, [p.id, longName]))[0].n, 1, { timeout: 10000 });
   await mp.getByRole("button", { name: "Deshacer" }).last().waitFor({ timeout: 10000 });
