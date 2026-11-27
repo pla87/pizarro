@@ -6,7 +6,7 @@ import { clientIp } from "@/lib/request";
 import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 import { isRowId } from "@/lib/row-id";
 import { SHARE_FILE_CSP, shareResponseHeaders } from "@/lib/share-out-core";
-import { resolveShareToken, shareAttachment, shareAuthorName, shareBytesAllowed, shareDownloadAllowed, shareIpAllowed } from "@/lib/share-out";
+import { releaseShareDownload, resolveShareToken, shareAttachment, shareAuthorName, shareBytesAllowed, shareDownloadAllowed, shareIpAllowed } from "@/lib/share-out";
 import { attachmentPath, safeDownloadMime } from "@/lib/uploads";
 
 export const runtime = "nodejs";
@@ -50,7 +50,13 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
   // «Abrir» el original desde la miniatura es una vista del fichero entero: cuenta como una descarga (tope y Logs).
   const open = inline && inlineParam === "open";
   // Las descargas y vistas cuentan para el tope del enlace; las imágenes de la descripción y las miniaturas no (ya cuentan por IP).
-  if ((!inline || open) && !head && !shareDownloadAllowed(share)) return fail(429, "Too many requests");
+  const counted = (!inline || open) && !head;
+  if (counted && !shareDownloadAllowed(share)) return fail(429, "Too many requests");
+  // Lo que al final no se sirve no gasta el cupo de descargas.
+  const notServed = (status: number, text: string) => {
+    if (counted) releaseShareDownload(share);
+    return fail(status, text);
+  };
   let variant: "full" | "thumb" | "file" = meta.isImage ? "full" : "file";
   let size: number | undefined;
   // La miniatura, si existe; si no (imágenes antiguas o sin miniatura), la normal.
@@ -66,12 +72,12 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
     try {
       size = (await stat(attachmentPath(meta.id, variant))).size;
     } catch {
-      return fail(404, "Not found");
+      return notServed(404, "Not found");
     }
   }
   // Los bytes cuentan en todas las variantes (HEAD no sirve nada).
-  if (!head && !shareBytesAllowed(share, size)) return fail(429, "Too many requests");
-  if ((!inline || open) && !head) {
+  if (!head && !shareBytesAllowed(share, size)) return notServed(429, "Too many requests");
+  if (counted) {
     logEvent({ category: "api", action: open ? "shareOut.view" : "shareOut.download", label: open ? { k: "Vista de «{name}» desde la web de «Compartir fuera»", p: { name: meta.originalName } } : { k: "Descarga de «{name}» desde la web de «Compartir fuera»", p: { name: meta.originalName } }, userName: await shareAuthorName(share), projectId: share.projectId, path: "/x/…", ip, details: { attachmentId: meta.id, taskId: meta.taskId, shareId: share.id, size } });
   }
   const name = meta.isImage ? meta.originalName.replace(/\.[^.]+$/, "") + ".webp" : meta.originalName;
