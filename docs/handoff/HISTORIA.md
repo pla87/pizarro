@@ -14,6 +14,15 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Respuestas del propietario a las preguntas de la v1.75.0 (para la ronda 73, sin aplicar):** 1: R69F1 notas
+generales con la opción A («Nueva nota» dentro de Documentación, mismo editor que las descripciones, autoguardado, fijar
+arriba, buscar, papelera, exportar y copias). 2: probar en real la guía de Railway para la IA, con el propietario delante
+(crea un proyecto de pago). 3: SÍ («¿Descartar el texto?» al importar un texto que no se puede leer). 4: SÍ (decir en el
+diálogo de pasar a privado que quien lo creó conserva el acceso). 5: SÍ (PDF del plan por persona: subtareas con tope en
+SQL). 6: NO (el aviso de revocado se sigue creando antes de responder). 7: NO (imagen dentro de un enlace en la web de
+fuera). Además, rondas propias ya aprobadas: una URL por tarea y el migrador sin Prisma. La Release de la v1.75.0 la lanzó
+la sesión con su permiso.
+
 **Decisiones de la ronda 72 (ya aplicadas, v1.75.0):** el propietario aceptó todas las recomendaciones de la v1.74.0
 («Compartir fuera» a-f: NO a todas; 7 y 8: NO) y lanzó la Release de la v1.74.0 desde la sesión. Hecho: aviso
 `SHARE_REVOKED` a quien generó la web cuando otra persona revoca a mano (campana y, con la preferencia de menciones, email,
