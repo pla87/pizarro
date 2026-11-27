@@ -44,10 +44,27 @@ export const WHATSAPP_CODE_LANG_KEY = "whatsapp.codeTemplateLang";
 export const WHATSAPP_CODE_LANG_EN_KEY = "whatsapp.codeTemplateLangEn";
 /** Último rechazo de Meta a la plantilla de verificación (JSON: código de error, plantilla, idioma y fecha); se borra al enviar bien un código o al guardar. */
 export const WHATSAPP_CODE_ERROR_KEY = "whatsapp.codeTemplateError";
+/** Tope de avisos por WhatsApp al día para toda la instalación (vacío = DEFAULT_WHATSAPP_DAILY_LIMIT). */
+export const WHATSAPP_DAILY_LIMIT_KEY = "whatsapp.dailyLimit";
 export const WHATSAPP_KEYS = [
   WHATSAPP_TOKEN_KEY, WHATSAPP_LAST4_KEY, WHATSAPP_PHONE_ID_KEY, WHATSAPP_TEMPLATE_KEY, WHATSAPP_LANG_KEY, WHATSAPP_LANG_EN_KEY, WHATSAPP_ENABLED_KEY,
-  WHATSAPP_CODE_TEMPLATE_KEY, WHATSAPP_CODE_LANG_KEY, WHATSAPP_CODE_LANG_EN_KEY, WHATSAPP_CODE_ERROR_KEY,
+  WHATSAPP_CODE_TEMPLATE_KEY, WHATSAPP_CODE_LANG_KEY, WHATSAPP_CODE_LANG_EN_KEY, WHATSAPP_CODE_ERROR_KEY, WHATSAPP_DAILY_LIMIT_KEY,
 ] as const;
+
+/**
+ * Avisos por WhatsApp al día en toda la instalación, como mucho (cada uno cuesta dinero): con solo los topes por persona,
+ * un miembro podía provocar cientos de mensajes de pago al día. El día es el natural en la zona de la instalación.
+ */
+export const DEFAULT_WHATSAPP_DAILY_LIMIT = 200;
+const MAX_WHATSAPP_DAILY_LIMIT = 100_000;
+
+/** Tope diario guardado: un entero de 1 a 100 000; cualquier otra cosa (o nada) = null (se usa el valor por defecto). */
+function parseWhatsappDailyLimit(raw: string): number | null {
+  const s = raw.trim();
+  if (!/^\d{1,6}$/.test(s)) return null;
+  const n = Number(s);
+  return n >= 1 && n <= MAX_WHATSAPP_DAILY_LIMIT ? n : null;
+}
 
 /** Plantilla que espera Pizarro (3 variables: aviso, proyecto y enlace). Ver docs/guias/whatsapp.md. */
 export const DEFAULT_WHATSAPP_TEMPLATE = "aviso_pizarro";
@@ -270,6 +287,8 @@ export interface WhatsappSettings {
   codeTemplateError: CodeTemplateError | null;
   /** null = no se ha guardado: activo si la configuración está completa. */
   enabled: boolean | null;
+  /** Tope diario guardado; null = el valor por defecto. */
+  dailyLimit: number | null;
 }
 
 /** Meta rechazó la plantilla de verificación: código de error de Meta, plantilla e idioma usados y cuándo (ISO). */
@@ -306,6 +325,7 @@ export function parseWhatsappSettings(rows: Rows): WhatsappSettings {
     codeTemplateLangEn: get(WHATSAPP_CODE_LANG_EN_KEY).trim(),
     codeTemplateError: parseCodeTemplateError(get(WHATSAPP_CODE_ERROR_KEY)),
     enabled: enabled === "" ? null : enabled === "true",
+    dailyLimit: parseWhatsappDailyLimit(get(WHATSAPP_DAILY_LIMIT_KEY)),
   };
 }
 
@@ -328,6 +348,8 @@ export interface WhatsappConfig {
   /** Idioma de la verificación para quien usa Pizarro en inglés; vacío = el de codeTemplateLang para todos. */
   codeTemplateLangEn: string;
   apiVersion: string;
+  /** Avisos por WhatsApp al día en toda la instalación, como mucho. */
+  dailyLimit: number;
   /**
    * Formato antiguo (4 variables y solo menciones): la plantilla «mencion_pizarro» o cualquiera que venga solo de la
    * variable WHATSAPP_TEMPLATE_NAME (instalaciones anteriores a la configuración en Ajustes).
@@ -363,6 +385,7 @@ export function resolveWhatsappConfig(env: Env, saved: WhatsappSettings, savedTo
     codeTemplateLang: saved.codeTemplateLang || templateLang,
     codeTemplateLangEn: saved.codeTemplateLangEn,
     apiVersion: clean(env.WHATSAPP_API_VERSION) || DEFAULT_WHATSAPP_API_VERSION,
+    dailyLimit: saved.dailyLimit ?? DEFAULT_WHATSAPP_DAILY_LIMIT,
     // Antes de poder configurarse en Ajustes, la plantilla solo podía venir de WHATSAPP_TEMPLATE_NAME y tenía 4 variables
     // (fuera cual fuera su nombre). Mientras siga saliendo de ahí, se usa ese formato (y solo menciones); al guardar un
     // nombre en Ajustes, el administrador confirma que es la plantilla nueva (salvo que sea la antigua mencion_pizarro).
@@ -386,6 +409,8 @@ export interface WhatsappSettingsInput {
   codeTemplateName?: string;
   codeTemplateLang?: string;
   codeTemplateLangEn?: string;
+  /** Tope de avisos al día para toda la instalación (vacío = DEFAULT_WHATSAPP_DAILY_LIMIT). */
+  dailyLimit?: string;
 }
 
 /** Valida y normaliza el formulario de WhatsApp (los campos vacíos usan las variables del servidor o el valor por defecto). */
@@ -397,10 +422,12 @@ export function validateWhatsappSettings(input: WhatsappSettingsInput): { ok: tr
   const codeTemplateName = String(input.codeTemplateName ?? "").trim();
   const codeTemplateLang = String(input.codeTemplateLang ?? "").trim();
   const codeTemplateLangEn = String(input.codeTemplateLangEn ?? "").trim();
+  const dailyLimit = String(input.dailyLimit ?? "").trim();
+  if (dailyLimit && parseWhatsappDailyLimit(dailyLimit) === null) return { ok: false, error: "El tope diario de WhatsApp debe ser un número entero entre 1 y 100000." };
   if (phoneNumberId && !WA_PHONE_ID_RE.test(phoneNumberId)) return { ok: false, error: "El identificador del número de WhatsApp son solo cifras (Phone number ID)." };
   for (const name of [templateName, codeTemplateName]) if (name && !WA_TEMPLATE_RE.test(name)) return { ok: false, error: "El nombre de la plantilla solo admite minúsculas, cifras y guiones bajos." };
   for (const lang of [templateLang, templateLangEn, codeTemplateLang, codeTemplateLangEn]) if (lang && !WA_LANG_RE.test(lang)) return { ok: false, error: "El idioma de la plantilla no es válido (por ejemplo es, es_ES o en_US)." };
-  return { ok: true, value: { phoneNumberId, templateName, templateLang, templateLangEn, codeTemplateName, codeTemplateLang, codeTemplateLangEn } };
+  return { ok: true, value: { phoneNumberId, templateName, templateLang, templateLangEn, codeTemplateName, codeTemplateLang, codeTemplateLangEn, dailyLimit: dailyLimit && String(parseWhatsappDailyLimit(dailyLimit)) } };
 }
 
 /** Texto de una variable de plantilla: Meta no admite saltos de línea, tabuladores ni más de 4 espacios seguidos. */

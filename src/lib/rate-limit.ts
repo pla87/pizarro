@@ -119,3 +119,9 @@ export function rateLimitRetryAfterSec(key: string): number {
   const b = storeFor(key).map.get(key);
   return b ? Math.max(1, Math.ceil((b.resetAt - Date.now()) / 1000)) : 1;
 }
+
+/** Usos gastados de `key` en su ventana (0 si no hay contador o ya venció). Solo consulta. */
+export function rateLimitCount(key: string): number {
+  const b = storeFor(key).map.get(key);
+  return b && b.resetAt >= Date.now() ? b.count : 0;
+}

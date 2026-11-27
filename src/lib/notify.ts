@@ -19,7 +19,8 @@ import {
 import { disconnectTelegramChat, sendTelegramMessage } from "./telegram";
 import { sendWhatsappNotice, whatsappLocale } from "./whatsapp";
 import { followerIds } from "./followers";
-import { rateLimit } from "./rate-limit";
+import { rateLimit, releaseRateLimit } from "./rate-limit";
+import { reserveWhatsappNotice } from "./whatsapp-quota";
 import { EMAIL_PREF_FIELD, noticeEmailKind } from "./unsubscribe-core";
 import { unsubscribeLinks } from "./unsubscribe-links";
 
@@ -190,6 +191,16 @@ export async function deliver(notificationIds: string[]): Promise<void> {
       if (!rateLimit(`notify:${key}:${n.user.id}`, CHANNEL_LIMIT_PER_HOUR[ch.channel], 60 * 60_000)) {
         if (rateLimit(`notify:${key}:${n.user.id}:warned`, 1, 60 * 60_000)) logEvent({ ...base, level: "warn", action: `notify.${key}RateLimited`, label: { k: "Tope de {max} mensajes por hora de {channel} alcanzado para {name}: los siguientes avisos de esta hora solo quedan en la app", p: { max: CHANNEL_LIMIT_PER_HOUR[ch.channel], channel: name, name: n.user.name } }, details });
         continue;
+      }
+      // Tope diario de WhatsApp para toda la instalación (cuesta dinero): al llegar, este aviso no sale por WhatsApp (los
+      // demás canales, igual) y queda una sola línea en Logs al día. No gasta el tope por persona.
+      if (ch.channel === "WHATSAPP") {
+        const quota = await reserveWhatsappNotice(messaging.whatsapp.dailyLimit);
+        if (!quota.ok) {
+          releaseRateLimit(`notify:${key}:${n.user.id}`);
+          if (quota.firstBlocked) logEvent({ category: "notify", level: "warn", action: "notify.whatsappDailyLimit", label: { k: "Tope diario de {max} mensajes de WhatsApp alcanzado: hasta mañana, los avisos solo quedan en la app y en los demás canales", p: { max: messaging.whatsapp.dailyLimit } }, details: { day: quota.day, max: messaging.whatsapp.dailyLimit } });
+          continue;
+        }
       }
       const t0 = performance.now();
       try {
