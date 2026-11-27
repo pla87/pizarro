@@ -18,7 +18,7 @@ import { rehashShareTokens, rotateEncryptedSecrets, type RotationDb } from "../.
 import { flushLogs } from "../../src/lib/log";
 import { subscribeProject } from "../../src/lib/realtime";
 import { eraseUser } from "../../src/lib/user-delete";
-import { externalNotice } from "../../src/lib/notification-text";
+import { externalNotice, shareRevokedExcerpt } from "../../src/lib/notification-text";
 import { buildProjectExport } from "../../src/lib/project-export/export";
 import { importProjectFile } from "../../src/lib/project-export/import";
 import { rateLimit } from "../../src/lib/rate-limit";
@@ -814,5 +814,54 @@ describe("compartir fuera: segunda vuelta de la revisión", () => {
     await withEnv({ TOKEN_SECRET: B, TOKEN_SECRET_PREVIOUS: undefined }, async () => {
       assert.equal((await page(token)).status, 200);
     });
+  });
+});
+
+describe("compartir fuera: aviso de enlace revocado (ronda 72)", () => {
+  const revokedNotices = (userId: string, projectId: string) => db.notification.findMany({ where: { userId, projectId, type: "SHARE_REVOKED" } });
+
+  test("si otra persona revoca a mano, quien generó la web recibe un aviso en la campana (una sola vez)", async () => {
+    const { ana, f, me } = await setup();
+    await generate(f.columns.todo);
+    await loginAs(ana);
+    const [a, b] = await Promise.all([revokeShareLink(f.columns.todo), revokeShareLink(f.columns.todo)]);
+    expectOk(a);
+    expectOk(b);
+    const got = await revokedNotices(me.id, f.project.id);
+    assert.equal(got.length, 1, "dos «Revocar» a la vez dan un solo aviso");
+    assert.equal(got[0]!.excerpt, shareRevokedExcerpt("Ana López", "Por hacer"));
+    assert.deepEqual([got[0]!.taskId, got[0]!.actorId, got[0]!.readAt], [null, null, null]);
+    assert.equal((await revokedNotices(ana.id, f.project.id)).length, 0, "quien revoca no se avisa a sí misma");
+    // Revocar otra vez un enlace ya revocado no avisa.
+    expectOk(await revokeShareLink(f.columns.todo));
+    assert.equal((await revokedNotices(me.id, f.project.id)).length, 1);
+  });
+
+  test("sin aviso si revoca quien la generó, si esa persona ya no está o no ve el proyecto, o si lo revoca el sistema", async () => {
+    const { admin, ana, f, me } = await setup();
+    // Lo revoca quien lo generó.
+    await generate(f.columns.todo);
+    expectOk(await revokeShareLink(f.columns.todo));
+    // Quien lo generó está desactivada.
+    await generate(f.columns.todo);
+    await db.user.update({ where: { id: me.id }, data: { active: false } });
+    await loginAs(ana);
+    expectOk(await revokeShareLink(f.columns.todo));
+    await db.user.update({ where: { id: me.id }, data: { active: true } });
+    // Quien lo generó ya no es miembro del proyecto privado.
+    await loginAs(me);
+    await generate(f.columns.todo);
+    await db.project.update({ where: { id: f.project.id }, data: { isPrivate: true } });
+    await db.projectMember.deleteMany({ where: { projectId: f.project.id, userId: me.id } });
+    await loginAs(ana);
+    expectOk(await revokeShareLink(f.columns.todo));
+    await db.projectMember.create({ data: { projectId: f.project.id, userId: me.id } });
+    await db.project.update({ where: { id: f.project.id }, data: { isPrivate: false } });
+    // Revocaciones automáticas: apagar la función en el proyecto.
+    await loginAs(me);
+    await generate(f.columns.todo);
+    await loginAs(admin);
+    expectOk(await setProjectShareOut(f.project.id, false));
+    assert.equal((await revokedNotices(me.id, f.project.id)).length, 0);
   });
 });
