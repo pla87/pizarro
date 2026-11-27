@@ -946,3 +946,13 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 ### 22.3 Tablero en vivo con menos recargas (tu instalación)
 
 - Deja un tablero abierto en dos navegadores. Cambia una tarjeta en uno: el otro la ve en uno o dos segundos, como siempre. Deja los dos quietos un buen rato (más de 15 minutos) y vuelve a cambiar algo: se sigue viendo al momento en el otro.
+
+## 23. Novedades de la v1.78.0: avisos en el dispositivo (push; con https)
+
+1. **Chrome en el ordenador:** *Mi perfil → Avisos → Avisos en este dispositivo*: activa, acepta el permiso y pulsa **Probar**. Pide a otra persona que te mencione: llega el aviso y, al pulsarlo, se abre la tarea. Desactívalo; vuelve a activarlo, cierra sesión y comprueba que dejan de llegar.
+2. **Edge, Firefox y Safari (macOS):** activar y **Probar** en cada uno.
+3. **Android con Chrome**, con Pizarro instalado y sin instalar: aviso con Pizarro cerrado, icono y pulsación.
+4. **iPhone:** en Safari sin instalar sale el mensaje de instalar; instalado en la pantalla de inicio (iOS 16.4 o posterior), activar y recibir.
+5. **Permiso bloqueado** en el navegador: la sección lo explica y el interruptor queda apagado.
+6. **Quitar** un dispositivo desde otro; **Cerrar las demás sesiones** corta los avisos de los otros dispositivos; una **mención en una nota** llega también.
+7. En *Logs*: `notify.push` y `notify.pushExpired`, sin la dirección del dispositivo.

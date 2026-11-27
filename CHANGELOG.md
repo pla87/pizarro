@@ -2,6 +2,23 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.78.0 — 2026-11-27 23:09
+
+Avisos en el dispositivo: notificaciones push del navegador y del móvil, gratis y sin configurar nada
+
+### Nuevas funcionalidades
+
+- Avisos en el dispositivo: notificaciones push del navegador y del móvil, gratis y sin configurar nada. Se activan en Mi perfil → Avisos → «Avisos en este dispositivo» (con la lista de dispositivos, «Quitar» y «Probar»), con sus propios tipos de aviso (por defecto menciones —también en notas—, asignaciones y fechas o «Esperando») y como mucho 30 por hora. Llevan solo quién y qué tarea o nota y el proyecto. En iPhone y iPad, con Pizarro instalado en la pantalla de inicio (iOS 16.4 o posterior).
+
+### Mejoras
+
+- Los avisos de un dispositivo van con su sesión: se cortan al cerrar sesión, al cerrarla desde otro dispositivo, al cambiar la contraseña o al caducar.
+
+### Cambios técnicos / DB
+
+- Web Push sin dependencias nuevas (VAPID y cifrado aes128gcm con node:crypto); claves de la instalación cifradas con ENCRYPTION_KEY y cubiertas por rotate-keys; solo se envía a los servicios push de Google, Mozilla, Apple y Microsoft, sin redirecciones y con 5 s como mucho.
+- Pruebas del informe semanal que fallaban según la hora del día (pasadas las 22:00).
+
 ## v1.77.0 — 2026-11-27 21:16
 
 Menciones en notas de Documentación con aviso (campana y email a elegir) y título automático de las notas

@@ -247,10 +247,11 @@ guardas «(Ronda 73)» de `GUARDAS.md`.
 resumen diario o no; `User.noteMentionEmail`, `Notification.documentId`), título automático de las notas
 (`noteAutoName`), y retirados `CHROME-R69.md` y `bh48a.test.ts`. Ver `HISTORIA.md`, ronda 74.
 
-**Siguiente (aprobado por el propietario):** **notificaciones push** como canal opcional en una ronda propia (servicio en
-`public/sw.js`, claves VAPID propias de la instalación, tabla de suscripciones por dispositivo, interruptor «Avisos en este
-dispositivo» en *Mi perfil → Avisos* respetando las preferencias por tipo; en iPhone/iPad solo con la app instalada, iOS
-16.4+). Después, rondas ya aprobadas: una URL por tarea y el migrador sin Prisma. La prueba real del prompt para que una IA
+**Ronda 74 (v1.78.0):** **avisos push del navegador** como canal opcional (Web Push sin dependencias nuevas, tabla
+`PushSubscription` atada a la sesión, claves VAPID cifradas, solo servicios de Google/Mozilla/Apple/Microsoft). Revisión
+de seguridad independiente con sus arreglos. Falta que el propietario lo pruebe en real (`docs/PRUEBAS.md` §23).
+
+**Siguiente:** rondas ya aprobadas: una URL por tarea y el migrador sin Prisma. La prueba real del prompt para que una IA
 agéntica instale en Railway, con el propietario delante. Ideas pospuestas: refresco en vivo de la lista de Documentación
 (el propietario dijo que no por ahora).
 
