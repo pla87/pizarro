@@ -389,9 +389,13 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
       const max = await getMaxCommentsPerTask();
       const comment = await db.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT 1 FROM "Task" WHERE "id" = ${taskId} FOR NO KEY UPDATE`;
+        // Doble clic en «Comentar»: el mismo texto, de la misma firma, hace menos de 30 s, ya está publicado.
+        const last = await tx.taskComment.findFirst({ where: { taskId, deletedAt: null }, orderBy: { createdAt: "desc" }, select: { authorId: true, authorName: true, body: true, createdAt: true } });
+        if (last && last.authorId === null && last.authorName === author.slice(0, 200) && last.body === body && Date.now() - last.createdAt.getTime() < 30_000) return "repeated" as const;
         if ((await tx.taskComment.count({ where: { taskId, deletedAt: null } })) >= max) return null;
         return tx.taskComment.create({ data: { taskId, authorId: null, authorName: author.slice(0, 200), body }, select: { id: true } });
       });
+      if (comment === "repeated") return { notice: "comment", label: { k: "" } };
       if (!comment) return { notice: "full", label: { k: "" } };
       ctx.undo = [{ t: "comment.remove", id: comment.id }];
       ctx.events = [{ taskId, code: "comment", label: { k: "Comentó en «{title}»", p: { title } } }];

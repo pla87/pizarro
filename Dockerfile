@@ -88,8 +88,6 @@ ENV NODE_ENV=production \
 RUN mkdir -p /app/uploads /app/.next/cache && chown node:node /app/uploads /app/.next/cache
 
 COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
-COPY --from=build /app/public ./public
 COPY --from=build /app/dist ./dist
 COPY --from=migrator /app/migrator ./migrator
 COPY changelog.json ./
