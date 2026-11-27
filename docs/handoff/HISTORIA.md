@@ -14,6 +14,21 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 69 (ya aplicadas):** el propietario dijo «adelante» a la propuesta de `docs/handoff/CHROME-R69.md`
+(diálogo y pie de «Compartir fuera» más claros, imagen pegada como bloque propio, columna vacía sin generar web, aviso de
+cambios sin publicar, «Compartida por <nombre>» en la web, sin apartados vacíos, los fallos de los informes y las preguntas
+2g, 3, 4 y 8 de la ronda 68). Cualquier miembro del proyecto puede revocar el enlace (no solo administradores ni quien lo
+generó), y el globo, el pie y el diálogo dicen quién y cuándo (`ColumnShare.revokedById`). Pregunta 2g: el «Deshacer» de un
+aviso propio ignora las entradas de fuera. Pregunta 3: el botón del pie del detalle es «Guardar y cerrar». Pregunta 4:
+«Nueva tarea» no prefija el título con un tipo que solo viene de «el último usado». Pregunta 8: `npm start` lanza las tareas de
+arranque en un proceso hijo. Decisión 2h aplicada: `generatedByName` ya no se escribe ni se lee (la columna se quita en la
+v1.74). Los avisos de mover no llevan «Deshacer» por diseño (la flecha ↶ ya lo hace) y «Casa y familia» ofrece todos los
+tipos con plantilla: no son fallos. No se hizo el aviso en la campana a quien generó la web cuando otra persona la revoca:
+necesita un valor nuevo de enum (se añade en una versión y se escribe en la siguiente). «Cambios sin publicar» no detecta
+ediciones de una tarea ya publicada (la web ya lee el contenido en vivo). Trabajo: modelo de los agentes a elección,
+revisando con Opus, y Claude in Chrome todo lo posible. La Release de la v1.73.0 quedó pendiente de lanzar por el
+propietario (no estaba delante).
+
 **Decisiones de la ronda 68 (ya aplicadas):** columna «Compartir fuera» en vez de una página por contacto: una web por
 columna (rol NONE + `ColumnShare`), activable solo por administradores y proyecto a proyecto, caducidad 7 días / 1 mes /
 3 meses sin uso (1 mes por defecto), 30 días de «ha caducado», sin indexar, desde fuera marcar hecha, cambiar la fecha,
