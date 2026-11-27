@@ -421,6 +421,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
     de autenticación `codigo_pizarro` (Meta lo exige para códigos de un solo uso; ajustes `whatsapp.codeTemplate*` en
     `AppState`, con traducción inglesa opcional). *Probar* envía las dos plantillas. Si Meta rechaza la de verificación,
     Ajustes lo marca en rojo y nadie puede conectar un número nuevo hasta crearla (guía de WhatsApp, paso 6).
+  - (Ronda 73) Tope DIARIO de avisos por WhatsApp para toda la instalación (`src/lib/whatsapp-quota.ts`): 200 por
+    defecto, `whatsapp.dailyLimit` en `AppState` (Integraciones, junto al resto de WhatsApp). Día natural en la zona de
+    la instalación (la clave `whatsapp:day:<día>` va en el mapa de seguridad); al arrancar se rellena con los
+    `whatsappSentAt` de hoy, para que un reinicio no regale otro cupo. Al llegar: no sale por WhatsApp (los demás canales
+    sí), una línea `notify.whatsappDailyLimit` al día en Logs e Integraciones lo marca («Hoy: N de M»). Solo cuentan los
+    avisos de `deliver`; los códigos y las pruebas tienen sus propios topes. Un envío nuevo de avisos por WhatsApp pasa
+    por `reserveWhatsappNotice`.
   - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
 
 ## Tareas de fondo y copias
