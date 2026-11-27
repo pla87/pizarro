@@ -752,9 +752,15 @@ describe("importar: personas", () => {
     const admin = await makeUser({ role: "ADMIN" });
     const general = await makeKind(null);
     const kind = { ref: "k1", name: general.name, color: "#3b82f6", position: 1, titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [], scope: "project" as const };
-    const s = await importProjectFile(await craft(minimal([{ kindRef: "k1" }], { kinds: [kind] })), asImporter(admin), { isPrivate: false });
+    const data = minimal([{ kindRef: "k1" }], { kinds: [kind] });
+    data.columns[0]!.defaultKindName = general.name;
+    const s = await importProjectFile(await craft(data), asImporter(admin), { isPrivate: false });
+    const col = await db.column.findFirstOrThrow({ where: { projectId: s.projectId } });
+    const task = await db.task.findFirstOrThrow({ where: { projectId: s.projectId } });
     const own = await db.taskKind.findMany({ where: { projectId: s.projectId } });
     assert.deepEqual(own.map((k) => k.name), [`${general.name} (2)`]);
+    assert.equal(col.defaultKindId, own[0]!.id);
+    assert.equal(task.kindId, own[0]!.id);
     assert.ok(s.warnings.some((w) => w.includes(general.name) && w.includes("(2)")));
   });
 });

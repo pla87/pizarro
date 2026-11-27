@@ -404,6 +404,8 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
     // Tipos: los generales se emparejan por nombre; si no existen aquí, se crean como tipos propios del proyecto.
     const kindIds = new Map<string, string>();
     const ownKindByName = new Map<string, string>();
+    // Nombre original (en el archivo) -> tipo propio creado, también si se ha renombrado por chocar con un tipo general.
+    const ownKindByFileName = new Map<string, string>();
     const kindRows: Prisma.TaskKindCreateManyInput[] = [];
     const importedAt = Date.now() - 1_000_000;
     const kindIndex = new Map(data.kinds.map((k, i) => [k.ref, i]));
@@ -412,6 +414,7 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
       let lower = name.toLowerCase();
       const existing = k.scope === "general" ? generalByName.get(lower) : undefined;
       if (existing) { kindIds.set(k.ref, existing); continue; }
+      const fileLower = lower;
       const dupe = ownKindByName.get(lower);
       if (dupe) { kindIds.set(k.ref, dupe); continue; }
       // Un tipo del proyecto no puede repetir el nombre de un tipo general de esta instalación: se le busca un nombre libre.
@@ -427,6 +430,7 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
       const id = newId();
       kindIds.set(k.ref, id);
       ownKindByName.set(lower, id);
+      ownKindByFileName.set(fileLower, id);
       kindRows.push({ id, projectId, name, color: k.color, position: k.position, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate,
         // Sin fecha en el archivo, orden creciente según el del archivo (desempata tipos con la misma posición).
         createdAt: k.createdAt ? date(k.createdAt) : new Date(importedAt + kindIndex.get(k.ref)!),
@@ -605,7 +609,7 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
         // con ese nombre, la columna se queda sin él. Después de crear los tipos (clave foránea).
         for (const c of data.columns) {
           const lower = c.defaultKindName?.toLowerCase();
-          const defaultKindId = lower ? (ownKindByName.get(lower) ?? generalByName.get(lower)) : undefined;
+          const defaultKindId = lower ? (ownKindByFileName.get(lower) ?? ownKindByName.get(lower) ?? generalByName.get(lower)) : undefined;
           if (defaultKindId) await tx.column.update({ where: { id: columnIds.get(c.ref)! }, data: { defaultKindId } });
         }
         if (hiddenKindIds.length) await tx.projectHiddenKind.createMany({ data: hiddenKindIds.map((kindId) => ({ projectId, kindId })) });
