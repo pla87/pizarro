@@ -340,6 +340,18 @@ describe("compartir fuera: lo que se hace desde fuera", () => {
     assert.equal(await db.taskComment.count({ where: { taskId: t1.id } }), 0);
   });
 
+  test("ronda 70: un doble clic en «Comentar» publica una sola vez (sin segundo aviso ni deshacer); otro texto sí se publica", async () => {
+    const { ana, f, t1 } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    assert.equal(noticeOf(await post(token, t1.id, { op: "comment", body: "Gracias" })), "comment");
+    assert.equal(noticeOf(await post(token, t1.id, { op: "comment", body: "Gracias" })), "comment");
+    assert.equal(await db.taskComment.count({ where: { taskId: t1.id } }), 1);
+    assert.equal(await db.notification.count({ where: { userId: ana.id, type: "COMMENT", taskId: t1.id } }), 1);
+    assert.equal(await db.taskEvent.count({ where: { taskId: t1.id, code: "comment" } }), 1);
+    assert.equal(noticeOf(await post(token, t1.id, { op: "comment", body: "Otra cosa" })), "comment");
+    assert.equal(await db.taskComment.count({ where: { taskId: t1.id } }), 2);
+  });
+
   test("formularios de otro sitio (403), tope de cambios por enlace y hora, y tareas que no son de este enlace", async () => {
     const { f, t1 } = await setup();
     const token = tokenOf((await generate(f.columns.todo)).url);

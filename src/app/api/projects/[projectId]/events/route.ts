@@ -1,4 +1,5 @@
 import { visibleProjectsWhere } from "@/lib/access";
+import { canAccessProject } from "@/lib/access-cache";
 import { db } from "@/lib/db";
 import { closePresenceStream, openPresenceStream, presenceJson, subscribePresence } from "@/lib/presence";
 import { liveCursor, MAX_STREAMS_PER_USER, openStreamCount, registerStream, subscribeProject } from "@/lib/realtime";
@@ -42,8 +43,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   if (!user) return new Response(t("No autorizado"), { status: 401 });
   const parsed = v.id.safeParse((await ctx.params).projectId);
   if (!parsed.success) return new Response(t("No encontrado"), { status: 404 });
-  const project = await db.project.findFirst({ where: { id: parsed.data, ...visibleProjectsWhere(user) }, select: { id: true } });
-  if (!project) return new Response(t("No encontrado"), { status: 404 });
+  if (!(await canAccessProject(user, parsed.data))) return new Response(t("No encontrado"), { status: 404 });
 
   if (openStreamCount(user.id) >= MAX_STREAMS_PER_USER) return new Response(t("Demasiadas conexiones abiertas."), { status: 429 });
   const sessionId = await currentSessionId();
@@ -63,7 +63,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
           cleanup();
         }
       };
-      const unregister = registerStream({ userId: user.id, projectId: project.id, sessionId, close: () => cleanup() });
+      const unregister = registerStream({ userId: user.id, projectId: parsed.data, sessionId, close: () => cleanup() });
       if (!unregister) {
         // Carrera con otra apertura simultánea: se supera el máximo, se cierra el canal.
         controller.close();
@@ -72,7 +72,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
       send("retry: 3000\n\n");
       // Presencia: la pestaña cuenta como «tablero a la vista» mientras el canal esté abierto. El id del canal va en el
       // saludo: el diálogo de una tarea lo usa para anunciarla una sola vez (api/tasks/[id]/viewers?stream=…).
-      const streamId = openPresenceStream(project.id, user.id, user.name);
+      const streamId = openPresenceStream(parsed.data, user.id, user.name);
       let lastPresence = "";
       // El estado llega ya en JSON, calculado una vez por proyecto (presence.ts); aquí solo se descarta si no ha cambiado.
       const sendPresence = (json: string) => {
@@ -80,13 +80,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
         lastPresence = json;
         send(`event: presence\ndata: ${json}\n\n`);
       };
-      const unsubscribe = subscribeProject(project.id, (c) => send(`event: change\ndata: ${JSON.stringify({ userId: c.userId, action: c.action, taskId: c.taskId ?? null, ...(c.taskIds ? { taskIds: c.taskIds } : {}), ...(c.full ? { full: true } : {}), at: c.at, seq: c.seq, cid: c.cid })}\n\n`));
+      const unsubscribe = subscribeProject(parsed.data, (c) => send(`event: change\ndata: ${JSON.stringify({ userId: c.userId, action: c.action, taskId: c.taskId ?? null, ...(c.taskIds ? { taskIds: c.taskIds } : {}), ...(c.full ? { full: true } : {}), at: c.at, seq: c.seq, cid: c.cid })}\n\n`));
       // Saludo: último aviso publicado en el proyecto. La pestaña que reabre el canal (estuvo oculta o se cortó) sabe así si
       // se perdió alguno y solo entonces pide el tablero (ver Board.tsx).
-      send(`event: hello\ndata: ${JSON.stringify({ ...liveCursor(project.id), stream: streamId })}\n\n`);
+      send(`event: hello\ndata: ${JSON.stringify({ ...liveCursor(parsed.data), stream: streamId })}\n\n`);
       // Estado completo de la presencia al conectar; después, solo cuando cambia.
-      sendPresence(presenceJson(project.id));
-      const unsubscribePresence = subscribePresence(project.id, sendPresence);
+      sendPresence(presenceJson(parsed.data));
+      const unsubscribePresence = subscribePresence(parsed.data, sendPresence);
       // Evento periódico con nombre (no un comentario: el navegador no los ve): mantiene viva la conexión a través de
       // proxies y le dice a la pestaña que el canal está sano (con él, el respaldo del tablero se espacia: Board.tsx).
       // Quién deja de contar como activo (5 minutos sin actividad) lo comprueba presence.ts una vez por proyecto.
@@ -95,7 +95,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
       const recheck = setInterval(() => {
         if (checking) return;
         checking = true;
-        stillAllowed(sessionId, project.id)
+        stillAllowed(sessionId, parsed.data)
           .then((ok) => {
             if (!ok) cleanup();
           })

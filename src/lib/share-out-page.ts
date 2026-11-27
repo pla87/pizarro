@@ -177,7 +177,7 @@ export function sharePageHtml(d: SharePageData, t: T): string {
       parts.push(`<h3>${escapeHtml(t("Subtareas"))}</h3><ul class="sub">${task.subtasks.map((s) => `<li>${s.done ? "☑" : "☐"} ${escapeHtml(mentionsToPlain(s.title))}</li>`).join("")}</ul>`);
     }
     if (task.attachments.length) {
-      // Las imágenes, con su miniatura (servida en línea, que no cuenta como descarga) que abre la imagen; el nombre es la descarga.
+      // Las imágenes, con su miniatura (servida en línea, que no cuenta como descarga); tanto la miniatura como el nombre enlazan a la descarga.
       const file = (a: SharePageTask["attachments"][number]) => `<a href="${escapeHtml(shareAttachmentPath(d.token, a.id))}">${escapeHtml(a.name)}</a> <span class="muted">(${escapeHtml(formatSize(a.size, d.locale))})</span>`;
       const item = (a: SharePageTask["attachments"][number]) => a.isImage
         ? `<li class="img"><a href="${escapeHtml(shareAttachmentPath(d.token, a.id))}"><img src="${escapeHtml(shareAttachmentPath(d.token, a.id, "thumb"))}" alt="${escapeHtml(a.name)}" loading="lazy"></a>${file(a)}</li>`
