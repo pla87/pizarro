@@ -236,61 +236,63 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 68:** v1.72.0 fusionada en `main` y publicada con *Actions → Release*. Ronda en la nube
-(Claude Code web), sin Claude in Chrome. Hechas las respuestas de R68R1: columna «Compartir fuera» (fase 1, con la
-dirección guardada cifrada para volver a enseñarla), decisiones 2, 5, 7, 8, 9 (al tocar cada suite), 10, 11, 12, 14 (a–d y
-f) y 16 (marked), los informes de Claude in Chrome de la v1.70/v1.71 y las capturas R68C1/R68C2. Dos vueltas de revisión de
-código y dos de caza de bugs (usuario, administración/instalación/coste, programación, atacante, «Compartir fuera» y toda la
-herramienta). Pendientes de Claude in Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v1.72.0, DMARC y
-WhatsApp real con el propietario delante).
+**Estado al cerrar la ronda 69:** v1.73.0 fusionada en `main`. **La Release está pendiente de lanzar por el propietario**
+(*Actions → Release* sobre `main`): no se lanzó porque no estaba delante; hasta entonces `stable` y la etiqueta `v1.72.0`
+siguen en la versión anterior y la instalación de prueba de Railway no tiene la v1.73.0. Hecho: «Compartir fuera» más claro
+(diálogo con dirección destacada, «Copiar», «Abrir» y «Enviar por email»; pie corto con el botón «Link» y la caducidad como
+botón; columna vacía sin generar; aviso de «cambios sin publicar»; quién revocó, que ahora puede cualquier miembro; web con
+«Compartida por…», miniaturas, sin apartados vacíos y con el aviso en la tarjeta), imágenes pegadas como bloque propio (y en
+su línea en el plan para IA y en la Release, con la ruta del ZIP), «Guardar y cerrar», «Nueva tarea» sin prefijo del tipo que
+viene solo de «el último usado», aviso ámbar en vivo con dos pestañas de la misma persona, «Solo se puede deshacer el último
+cambio…» como aviso informativo, «Deshacer» propio que ignora las entradas de fuera, «Descartar cambios» de Plantillas,
+recuadro de invitación al quitar un miembro, errata «de mí» del tipo «Respuesta» (migración) y `npm start` con las tareas de
+arranque en un proceso hijo (~170 MB menos). Dos migraciones nuevas: `20261204100000_compartir_fuera_revocado_por` y
+`20261204110000_respuesta_errata`. Las decisiones, en `HISTORIA.md`. Informes
+de Claude in Chrome de la v1.72.0 (ya aplicados): `docs/handoff/CHROME-R69.md` (anexo de historia). Pendientes de Claude in
+Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v1.73.0, DMARC y WhatsApp real con el propietario delante).
 
-**Siguiente sesión: local, en el PC del propietario, con Claude in Chrome** (`docs/handoff/LOCAL.md`). En este orden:
+**Siguiente sesión: la ronda 70, ya encargada por el propietario, en esta misma sesión local** (PC del propietario, con
+Claude in Chrome; `docs/handoff/LOCAL.md`). Encargo, a elegir el modelo de los agentes y revisando con Opus:
+1. Mejoras operativas (R94M1 en sus palabras): UX sin complicar la web, eficiencia, velocidad y seguridad; abaratar el
+   servidor y el coste de IA sin bajar la calidad de los procesos ni de las revisiones. Se arregla lo evidente y se pregunta
+   lo opcional; se propone qué retirar (ficheros, código sin uso) y se **pregunta antes de borrar**. 10 vueltas o hasta que no
+   haya mejoras evidentes; se guarda el progreso.
+2. Caza de bugs (R94RE1): como cliente, editor, programador y atacante; navegando adelante y atrás y metiendo datos de todo
+   tipo. Pizarro no llama a IA de pago (el tope de 5 € no aplica) ni tiene «pedidos» ni «láminas». 10 vueltas o hasta que no
+   haya bugs; se guarda el progreso.
+3. Claude in Chrome permitido, despacio. El propietario no estará para aprobar comprobaciones anti-robots: no se pueden
+   saltar, se omite ese paso.
+4. Al terminar: fusionar en `main` con su commit, actualizar el PDF del manual (en local, sin subirlo) y PRUEBAS si hace
+   falta, y dar el resumen de cambios, la lista de decisiones y los próximos pasos. **La Release la lanza el propietario**
+   (también la de la v1.73.0, que sigue pendiente): no se lanza mientras no esté.
+Antes de empezar, el arranque local de LOCAL.md («Puesta en marcha») desde `origin/main`, con `npx prisma migrate deploy`
+(la v1.73 trae las dos migraciones de arriba).
 
-1. Arranque local (LOCAL.md, «Puesta en marcha»): rama de trabajo nueva desde `origin/main`, `npm ci`, PostgreSQL en
-   marcha, `npx prisma migrate deploy` (la v1.72 trae dos migraciones: `20261202100000_compartir_fuera` y
-   `20261203100000_compartir_fuera_token_cifrado`). Comprobar que `git log -1 origin/main` es «v1.72.0: …» y que
-   `origin/stable` y la etiqueta `v1.72.0` apuntan a ese commit.
-2. Claude in Chrome, con las reglas de LOCAL.md («Claude in Chrome») y los prompts de `docs/PRUEBAS-CHROME.md`:
-   - **Prompt 1, pruebas en real de la v1.72.0** en la instalación de PRUEBA (primero comprobar en Railway que ha
-     desplegado la v1.72.0 desde `stable`). Incluye «Compartir fuera»: lo de la ventana privada, el móvil, el Ctrl+V real
-     de una imagen en la descripción y la ventana muy ancha los hace el propietario; la sesión le guía.
-   - **Prompt 2, auditoría como usuario de la v1.72.0.**
-   - **Prompt 3, primeros informes DMARC** (solo mirar).
-   - **Prompt 4, WhatsApp en la instalación REAL**, solo con el propietario delante y si lo pide en esa sesión.
-   Los informes van a una carpeta temporal fuera del repositorio (sin datos personales en ficheros ni commits). Lo que
-   falle se arregla en la ronda 69; al cerrarla, «Estado» de PRUEBAS-CHROME y los prompts al día.
-3. Ronda 69: las respuestas del propietario a las preguntas de abajo (recomendadas para empezar: 2g, 3, 4 y 8) y lo que
-   salga de los informes de Chrome. Comprobaciones y e2e en local (§4); minutos de Actions solo para la PR y la Release.
-
-**Hecho tras la ronda 68 (sesión local, 25–26 nov):** pasados los prompts 1, 2 y 3 de Claude in Chrome sobre la v1.72.0.
-Resultados, fallos, lo que confunde, lo que pidió el propietario, lo pendiente para él y la propuesta para la ronda 69:
-**`docs/handoff/CHROME-R69.md`** (léelo al empezar la ronda 69).
-
-**Preguntas abiertas al propietario (tras la v1.72.0)**, con la numeración del informe final de la ronda 68 (entre
-paréntesis, la recomendación que se le dio):
+**Preguntas abiertas al propietario (tras la v1.73.0)**, con la recomendación entre paréntesis. Se renumeran: la
+numeración de la ronda 68 ya no vale (se contestaron 2g, 2h, 3, 4 y 8; la 2h se aplica en la v1.74):
 
 1. Creador de un proyecto de equipo: no es miembro (modelo de la v1.17, `adminPicks`). A) explicar en Ajustes quién lo ve
    sin ser miembro (SÍ) o B) hacerle miembro al crear.
 2. «Compartir fuera», opcionales: a) mostrar solo las tareas que siguen en la columna o están terminadas (NO: se actualiza
    con el botón); b) tope de MB en las descargas (NO por ahora); c) 30 días de «caducado» también para el penúltimo enlace
    (NO); d) no publicar los comentarios internos (NO: el aviso del pie lo dice); e) tope diario de cambios por enlace (NO
-   por ahora); f) Ctrl+Z al elegir o quitar la función (NO: necesita una operación nueva de deshacer en dos versiones);
-   g) el «Deshacer» de un aviso propio falla si lo último de la pila vino de fuera (SÍ, ronda 69); h) dejar de escribir
-   `ColumnShare.generatedByName` y quitar la columna en la versión siguiente (SÍ).
-3. «Guardar» del pie del detalle → «Guardar y cerrar» con explicación (SÍ, pequeño).
-4. «Nueva tarea» desde una columna sin tipo por defecto: no prefijar el título cuando el tipo viene solo de «el último
-   usado» (SÍ).
-5. «Organizar por personas» también en la tarjeta de bienvenida de «Casa y familia» (SÍ).
-6. Ocultar «Release con selección» y Releases en proyectos sin columna «Siguiente salto» ni releases (SÍ).
-7. Quitar las etiquetas de ejemplo «Persona 1/2» de «Casa y familia» (SÍ, ronda propia: cambia la huella de la plantilla).
-8. `npm start` (sin Docker): lanzar `dist/boot.mjs` en un proceso aparte para liberar ~170 MB (SÍ; cambia una guarda).
-9. Caché de la imagen en la Release (`cache-from/to: gha`): menos minutos de Actions (SÍ).
-10. Retirar: a) `parseProfileTab` (SÍ); b) `listProjectDocuments`/`listTrashedDocuments`, que solo usan las pruebas (SÍ,
-    pasando sus pruebas a las variantes `…Of`); c) `htmlTableToMarkdown` (SÍ); d) `export` sin uso en scripts de entrada
-    (SÍ); e) `/x/` en robots, redundante con `/` (NO: explícito).
-11. Probar en real el texto para la IA de la guía de Railway (cuesta un proyecto de Railway más).
-12. Pendiente aprobado: una URL por tarea (`?tarea=ID`, abre el tablero con la tarea abierta), en una ronda propia; y el
-    migrador propio sin Prisma, en otra.
+   por ahora); f) Ctrl+Z al elegir o quitar la función (NO: necesita una operación nueva de deshacer en dos versiones).
+3. «Organizar por personas» también en la tarjeta de bienvenida de «Casa y familia» (SÍ).
+4. Ocultar «Release con selección» y Releases en proyectos sin columna «Siguiente salto» ni releases (SÍ).
+5. Quitar las etiquetas de ejemplo «Persona 1/2» de «Casa y familia» (SÍ, ronda propia: cambia la huella de la plantilla).
+6. Caché de la imagen en la Release (`cache-from/to: gha`): menos minutos de Actions (SÍ).
+7. Retirar: a) `parseProfileTab` (SÍ); b) `listProjectDocuments`/`listTrashedDocuments`, que solo usan las pruebas (SÍ,
+   pasando sus pruebas a las variantes `…Of`); c) `htmlTableToMarkdown` (SÍ); d) `export` sin uso en scripts de entrada
+   (SÍ); e) `/x/` en robots, redundante con `/` (NO: explícito). Se pregunta antes de borrar (ronda 70).
+8. Probar en real el texto para la IA de la guía de Railway (cuesta un proyecto de Railway más).
+9. Pendiente aprobado: una URL por tarea (`?tarea=ID`, abre el tablero con la tarea abierta), en una ronda propia; y el
+   migrador propio sin Prisma, en otra.
+10. Aviso en la campana a quien generó la web cuando otra persona revoca el enlace: necesita un valor nuevo de enum (la
+    v1.74 lo añade y la v1.75 lo escribe, para no romper la versión anterior) (SÍ).
+11. En la v1.74, quitar la columna `ColumnShare.generatedByName` (ya decidido, 2h) y la limpieza de `globalThis.prisma` de
+    `scripts/boot.ts` (líneas 52-63), que ya no hace falta con el arranque en un proceso aparte (SÍ).
+12. «Cambios sin publicar» también al editar una tarea ya publicada: requiere llevar la fecha de cambio al tablero (NO por
+    ahora: la web ya lee el contenido en vivo).
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.
@@ -302,7 +304,7 @@ Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y me
 | `docs/handoff/GUARDAS.md` | Las guardas técnicas de §4 (y las de cada ronda) por tema: tablero, navegador, logs, migraciones, base de datos, PDF, subidas, importar, i18n, fechas, servidor, seguridad, emails, tareas de fondo, plantillas, deshacer, pruebas, e2e, entorno | Al repartir una ronda, la sección del tema de cada agente (cópiala a su brief); al revisar una entrega de ese tema |
 | `docs/handoff/HISTORIA.md` | Decisiones de cada ronda ya aplicadas, lo hecho de la paquetización, ideas pospuestas, límites conocidos y menores sin numerar | Cuando el propietario pregunte por algo ya decidido, antes de proponer algo que pudo descartarse, y al cerrar la ronda (para añadir sus decisiones) |
 | `docs/handoff/LOCAL.md` | Sesión en el PC del propietario: requisitos, puesta en marcha, trampas de Windows, recursos, publicar desde local y reglas de Claude in Chrome | Solo si la sesión corre en el PC del propietario |
-| `docs/handoff/CHROME-R69.md` | Informes de Claude in Chrome sobre la v1.72.0 (prompts 1–3) y propuesta para la ronda 69 | Al empezar la ronda 69 |
+| `docs/handoff/CHROME-R69.md` | Informes de Claude in Chrome sobre la v1.72.0 (prompts 1–3) y la propuesta que se aplicó en la ronda 69 (historia) | Solo si hace falta saber qué se encontró y por qué |
 | `docs/PRUEBAS-CHROME.md` | Prompts para Claude in Chrome pendientes y lo aprendido al usarlos | Si la ronda trae informes de Claude in Chrome y al cerrarla (para actualizar los prompts) |
 | `docs/handoff/PUBLICAR.md` | Cerrar y publicar una versión paso a paso, `STABLE_PUSH_TOKEN`, mover `stable`, publicar desde la sesión, Dependabot | Al cerrar una versión o si falla el workflow Release; al revisar un PR de Dependabot |
 | `e2e/SUITES.md` | Qué prueba cada suite e2e y cómo se lanza sola (las cifras, en `e2e/README.md`) | Al tocar o lanzar una suite concreta |
