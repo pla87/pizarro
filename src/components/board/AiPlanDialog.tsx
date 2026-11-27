@@ -66,6 +66,12 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   });
   const selectionTouched = useRef(false);
   const [setup, setSetup] = useState<Setup | null>(null);
+  /**
+   * «Generar» espera a las plantillas y la versión: generado antes, el texto llevaba la cabecera de serie y al llegar la de
+   * la persona el selector cambiaba sin cambiar el texto (y al elegir otra salían dos). Si la consulta falla, se avisa y se
+   * genera con lo de serie.
+   */
+  const [setupFailed, setSetupFailed] = useState(false);
   const builtin = useMemo<Groups>(() => {
     const d = AI_PLAN_DEFAULTS[locale === "en" ? "en" : "es"];
     return { headers: [{ id: AI_PLAN_BUILTIN_ID, name: d.headerName, content: d.header }], footers: [{ id: AI_PLAN_BUILTIN_ID, name: d.footerName, content: d.footer }] };
@@ -89,7 +95,10 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   const [moveTo, setMoveTo] = useState(() => targets[targets.findIndex((c) => c.position > column.position)]?.id ?? targets[0]?.id ?? "");
 
   useEffect(() => loadWhenOnline(() => getAiPlanSetup({ projectId: board.project.id, columnId: column.id }), (res) => {
-    if (!res.ok) return toast(res.error, "error");
+    if (!res.ok) {
+      setSetupFailed(true);
+      return toast(res.error, "error");
+    }
     setSetup(res.data);
     // Por defecto, la primera plantilla de la persona; si no tiene, la primera del proyecto; si tampoco, la de serie.
     if (!templatesTouched.current) {
@@ -101,7 +110,11 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
       const notDue = tasks.filter((x) => x.evergreen && !evergreenDue(res.data.nextColumnPlan, x.evergreenEvery)).map((x) => x.id);
       if (notDue.length) setChosen((prev) => new Set([...prev].filter((id) => !notDue.includes(id))));
     }
-  }, () => {}), [board.project.id, column.id, tasks, toast]);
+  }, (e) => {
+    setSetupFailed(true);
+    toast(actionThrowResult(e, t).error, "error");
+  }), [board.project.id, column.id, tasks, toast, t]);
+  const setupPending = !setup && !setupFailed;
 
   const own = setup?.templates ?? NONE;
   const project = setup?.projectTemplates ?? NONE;
@@ -130,6 +143,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   const dueHint = (n: number) => (n === 0 ? t("ahora") : n === 1 ? t("en el siguiente") : t("dentro de {n}", { n }));
 
   const generate = async () => {
+    if (setupPending) return;
     setLoading(true);
     const res = await getAiPlanTaskDetails({ projectId: board.project.id, taskIds: selectedTasks.map((x) => x.id) })
       .catch((e: unknown) => (isNetworkError(e) ? (reportOffline(), null) : actionThrowResult(e, t)));
@@ -288,8 +302,8 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
               <TemplateSourceNote projectId={board.project.id} projectTab="releases" />
             )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
-            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loading}>
-              {loading && <Loader2 size={15} className="animate-spin" />} {selectedTasks.length === 1 ? t("Generar con 1 tarea") : t("Generar con {n} tareas", { n: selectedTasks.length })}
+            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loading || setupPending}>
+              {(loading || setupPending) && <Loader2 size={15} className="animate-spin" />} {selectedTasks.length === 1 ? t("Generar con 1 tarea") : t("Generar con {n} tareas", { n: selectedTasks.length })}
             </button>
           </>
         ) : (
@@ -317,7 +331,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
       }
     >
       {step === "select" ? (
-        <div className="space-y-3" data-plan-step="select" data-plan-setup={setup ? "ready" : "loading"}>
+        <div className="space-y-3" data-plan-step="select" data-plan-setup={setup ? "ready" : setupFailed ? "failed" : "loading"}>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             {t("Un texto en Markdown para que una IA (p. ej. Claude Code) haga estas tareas: contexto del proyecto, instrucciones y, por cada tarea, su descripción, subtareas, etiquetas, fechas, enlaces y adjuntos.")}
           </p>

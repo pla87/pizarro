@@ -386,4 +386,7 @@ export const board: Record<string, string> = {
   "Hay tareas sin crear. ¿Descartarlas?": "Some tasks are not created yet. Discard them?",
   // Ronda 72: copia de «Varias tareas» encima del fondo
   "Abrir «Varias tareas» al lado": "Open “Several tasks” alongside",
+  // Ronda 72: «Generar release» espera al número de la release
+  "No se ha podido saber el número de la release.": "Could not get the release number.",
+  "Vuelve a generar el texto: falta el número de la release.": "Generate the text again: the release number is missing.",
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 /**
  * ¿Tiene sentido enseñar «Releases» en el menú del proyecto? Solo si tiene una columna con el rol «Siguiente salto» o ya
@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 const known = new Map<string, boolean>();
 const listeners = new Set<() => void>();
 
-/** Apunta si el proyecto usa releases (lo llama el tablero y el layout al cargar la página). */
+/** Apunta si el proyecto usa releases (lo llaman el tablero y, cuando cambia lo que trae el layout, el menú). */
 export function setReleaseNav(projectId: string, show: boolean): void {
   if (known.get(projectId) === show) return;
   known.set(projectId, show);
@@ -28,4 +28,21 @@ export function useReleaseNav(projectId: string, initial: boolean | undefined): 
     () => undefined,
   );
   return value ?? initial ?? true;
+}
+
+/**
+ * Lo que trae el layout del servidor (`releaseNav`), apuntado cuando cambia: tras un `router.refresh()` (p. ej. al aplicar
+ * una plantilla en Ajustes) el menú no se queda con lo que apuntó el tablero antes. Al montar no se apunta: hasta que el
+ * tablero diga algo vale como `initial` de useReleaseNav, y el tablero (que se monta antes) ya tiene sus columnas en vivo.
+ */
+export function useServerReleaseNav(nav: { id: string; show: boolean } | null): void {
+  const id = nav?.id ?? null;
+  const show = nav?.show ?? null;
+  const last = useRef(`${id}:${show}`);
+  useEffect(() => {
+    const key = `${id}:${show}`;
+    if (key === last.current) return;
+    last.current = key;
+    if (id !== null && show !== null) setReleaseNav(id, show);
+  }, [id, show]);
 }

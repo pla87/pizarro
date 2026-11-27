@@ -47,7 +47,7 @@ import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { loadWhenOnline } from "@/lib/connection";
 import { useActionTransition } from "@/components/useActionTransition";
 import { showProjectIntroOnce } from "@/components/board/ProjectIntroNotice";
-import { useReleaseNav } from "@/components/board/releaseNav";
+import { useReleaseNav, useServerReleaseNav } from "@/components/board/releaseNav";
 
 interface Props {
   user: CurrentUser;
@@ -90,6 +90,7 @@ export function AppShell(props: Props) {
 
 function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, releaseNav = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, feedback = null, children }: Props) {
   useFocusRingScroll();
+  useServerReleaseNav(releaseNav);
   const t = useT();
   const pathname = usePathname();
   // El menú móvil se cierra solo al navegar: queda asociado a la ruta en que se abrió.
