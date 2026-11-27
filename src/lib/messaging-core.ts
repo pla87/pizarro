@@ -212,7 +212,7 @@ export interface NoticeMessage {
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 
 /** Frase del aviso con la tarea entre comillas del idioma (como en el email), en una línea («Ana te ha asignado «Pantalla»»). */
-function noticeHeadline(m: NoticeMessage, t: T): string {
+export function noticeHeadline(m: NoticeMessage, t: T): string {
   if (m.headline) return oneLine(m.headline);
   return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: ellipsize(oneLine(m.taskTitle), 120) }), excerpt: m.excerpt, note: m.note }));
 }

@@ -233,4 +233,51 @@ export const mensajeria: Record<string, string> = {
   "Tope de avisos al día": "Daily notification limit",
   "Avisos por WhatsApp como mucho cada día (desde medianoche, en la zona horaria de la instalación) entre todas las personas. Al llegar, el resto del día los avisos solo quedan en la app y en los demás canales, y queda una línea en Logs. Vacío = {n}.":
     "Maximum WhatsApp notifications per day (from midnight, in the installation's time zone) across everyone. Once reached, for the rest of the day notifications only stay in the app and the other channels, and a line is written to Logs. Empty = {n}.",
+  // Avisos push del navegador (Mi perfil → Avisos → «Avisos en este dispositivo», Logs)
+  "Avisos en este dispositivo": "Notifications on this device",
+  "Notificaciones del navegador o del móvil, aunque Pizarro esté cerrado. Gratis. Se activan en cada dispositivo y al cerrar sesión se desactivan en ese navegador.":
+    "Browser or phone notifications, even when Pizarro is closed. Free. Turn them on on each device; signing out turns them off in that browser.",
+  "Recibir avisos en este dispositivo": "Get notifications on this device",
+  "Qué avisos recibir en tus dispositivos": "Which notifications your devices get",
+  "Menciones (@), también en notas de Documentación": "Mentions (@), also in Documentation notes",
+  "Tus dispositivos con avisos ({n} de {max})": "Your devices with notifications ({n} of {max})",
+  "Este dispositivo": "This device",
+  "Desde el {date} · servicio de {service}": "Since {date} · {service} service",
+  "último aviso: {date}": "last notification: {date}",
+  "Avisos activados en este dispositivo.": "Notifications turned on on this device.",
+  "Avisos desactivados en este dispositivo.": "Notifications turned off on this device.",
+  "Dispositivo quitado.": "Device removed.",
+  "Aviso de prueba enviado a {sent} de {total} dispositivos.": "Test notification sent to {sent} of {total} devices.",
+  "Aviso de prueba enviado. Si no lo ves, revisa los permisos de notificaciones del sistema.":
+    "Test notification sent. If you don't see it, check the system's notification permissions.",
+  "El navegador no ha podido activar los avisos. Si usas Brave, activa «Usar los servicios de Google para la mensajería push» en su configuración.":
+    "The browser couldn't turn on notifications. If you use Brave, turn on “Use Google services for push messaging” in its settings.",
+  "En iPhone y iPad, los avisos solo funcionan con Pizarro instalado en la pantalla de inicio (iOS 16.4 o posterior): en Safari, Compartir → «Añadir a pantalla de inicio», y abre Pizarro desde ese icono.":
+    "On iPhone and iPad, notifications only work with Pizarro installed on the Home Screen (iOS 16.4 or later): in Safari, Share → “Add to Home Screen”, then open Pizarro from that icon.",
+  "Los avisos en el dispositivo necesitan que Pizarro se abra con https.": "Device notifications need Pizarro to be opened over https.",
+  "Este navegador no admite avisos push. Prueba con Chrome, Edge, Firefox o Safari actualizados.":
+    "This browser doesn't support push notifications. Try an up-to-date Chrome, Edge, Firefox or Safari.",
+  "Has bloqueado las notificaciones de Pizarro en este navegador. Para activarlas, permítelas en la configuración del sitio (el candado junto a la dirección) y vuelve aquí.":
+    "You've blocked Pizarro's notifications in this browser. To turn them on, allow them in the site settings (the padlock next to the address) and come back here.",
+  "Aviso de prueba de Pizarro": "Pizarro test notification",
+  "Si lo ves, los avisos en este dispositivo funcionan.": "If you can see it, notifications on this device work.",
+  "Ya tienes {max} dispositivos con avisos. Quita alguno de la lista para activar este.": "You already have {max} devices with notifications. Remove one from the list to turn this one on.",
+  "Este navegador usa un servicio de avisos que Pizarro no admite.": "This browser uses a notification service that Pizarro doesn't support.",
+  "El navegador ha dado una suscripción no válida. Vuelve a intentarlo.": "The browser returned an invalid subscription. Try again.",
+  "Ese dispositivo ya no está en la lista.": "That device is no longer on the list.",
+  "Activa primero los avisos en este dispositivo.": "Turn on notifications on this device first.",
+  "Activó los avisos push en {device}": "Turned on push notifications on {device}",
+  "Renovó los avisos push en {device}": "Renewed push notifications on {device}",
+  "Desactivó los avisos push en este dispositivo": "Turned off push notifications on this device",
+  "Quitó un dispositivo de los avisos push": "Removed a device from push notifications",
+  "Cambió sus avisos push": "Changed their push notifications",
+  "Probó sus avisos push": "Tested their push notifications",
+  "Aviso push enviado a {name} ({service})": "Push notification sent to {name} ({service})",
+  "Avisos push: el dispositivo de {name} ({service}) ya no está suscrito y se ha quitado": "Push notifications: {name}'s device ({service}) is no longer subscribed and was removed",
+  "Fallo al enviar el aviso push a {name} ({service}): {error}": "Failed to send the push notification to {name} ({service}): {error}",
+  "Tope de {max} avisos push por hora alcanzado para {name}: los siguientes avisos de esta hora solo quedan en la app":
+    "Limit of {max} push notifications per hour reached for {name}: further notifications this hour only stay in the app",
+  "Avisos push: no se pudo descifrar la clave de la instalación (¿cambió ENCRYPTION_KEY?) y se ha creado otra; cada persona tiene que volver a activar los avisos en sus dispositivos":
+    "Push notifications: the installation key could not be decrypted (did ENCRYPTION_KEY change?) and a new one was created; everyone has to turn notifications on again on their devices",
+  "{n} aviso(s) de mención en una nota creados ({external} con envío externo al momento)": "{n} note mention notification(s) created ({external} sent outside right away)",
 };

@@ -96,5 +96,6 @@ export const documentacion: Record<string, string> = {
   "Abrir la nota": "Open the note",
   "{actor} te ha mencionado en la nota {task}": "{actor} mentioned you in the note {task}",
   "Email de mención en una nota enviado a {name}": "Note mention email sent to {name}",
+  // Textos guardados por versiones anteriores (Logs de la v1.77; desde la v1.78 dice «con envío externo», por el push)
   "{n} aviso(s) de mención en una nota creados ({external} por email al momento)": "{n} note mention notification(s) created ({external} by email right away)",
 };

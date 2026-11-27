@@ -525,6 +525,8 @@
     "interfaz-textos-e2e": [
       "src/i18n/**",
       "src/app/(app)/settings/EmailNoticesSection.tsx",
+      "src/app/(app)/settings/PushSection.tsx",
+      "src/lib/push-client.ts",
       "src/actions/collab-prefs.ts",
       "src/components/ui/InfoTip.tsx",
       "src/components/board/ReleaseDialog.tsx",

@@ -46,6 +46,7 @@ import { useFocusTrap } from "./ui/focusTrap";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { loadWhenOnline } from "@/lib/connection";
 import { useActionTransition } from "@/components/useActionTransition";
+import { forgetPushOnThisDevice } from "@/lib/push-client";
 import { showProjectIntroOnce } from "@/components/board/ProjectIntroNotice";
 import { useReleaseNav, useServerReleaseNav } from "@/components/board/releaseNav";
 
@@ -401,7 +402,14 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
             </HoverPrefetchLink>
           </div>
           <FeedbackButton />
-          <form action={logout} onSubmit={() => clearDraftsOnLogout(user.clearDraftsOnLogout)}>
+          <form
+            action={logout}
+            onSubmit={() => {
+              clearDraftsOnLogout(user.clearDraftsOnLogout);
+              // En este navegador dejan de llegar los avisos push de la cuenta (un ordenador compartido, por ejemplo).
+              forgetPushOnThisDevice();
+            }}
+          >
             <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>
               <LogOut size={17} />
             </button>
