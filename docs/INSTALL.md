@@ -493,6 +493,8 @@ Restaura la base de datos y los adjuntos **de la misma fecha**.
 
 La imagen trae la herramienta `node dist/restore.mjs` y todas las migraciones. Sobre una base de datos **vacía**, verifica la copia, aplica las migraciones hasta la de la copia, carga los datos, aplica las migraciones posteriores y, con `--files`, restaura los ficheros en el volumen de subidas (comprobando cada uno). Vale para copias de esta versión o de cualquier versión anterior; una copia de una versión **más nueva** que la imagen se rechaza (actualiza primero, sección 5).
 
+Al terminar se cierran **todas las sesiones** (y los dispositivos de confianza): todo el mundo vuelve a iniciar sesión, y una sesión cerrada después de la copia no revive. Lo demás vuelve a como estaba en la copia: si después de esa fecha cambiaste una contraseña, revocaste un enlace de «Compartir fuera» o regeneraste un calendario suscrito, repítelo.
+
 Origen de la copia (primer argumento):
 
 | Origen | Copia |

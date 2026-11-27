@@ -39,6 +39,22 @@ describe("cola de renders PDF", () => {
     // Vacía la cola, vuelve a aceptar.
     assert.equal(await queuedRender(async () => "otra"), "otra");
   });
+
+  test("una persona con 2 PDF en marcha no puede pedir un tercero; otra sí, y al terminar vuelve a poder", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const first = queuedRender(() => gate.then(() => 1), 5000, undefined, "ana");
+    const second = queuedRender(async () => 2, 5000, undefined, "ana");
+    await assert.rejects(queuedRender(async () => 3, 5000, undefined, "ana"), (err: Error) => (err as Error & { status: number }).status === 503 && err.message === "Ya tienes PDF generándose: espera a que terminen.");
+    const other = queuedRender(async () => "luis", 5000, undefined, "luis");
+    release();
+    assert.deepEqual(await Promise.all([first, second, other]), [1, 2, "luis"]);
+    assert.equal(await queuedRender(async () => 4, 5000, undefined, "ana"), 4);
+    // Un fallo también libera el sitio.
+    await assert.rejects(queuedRender(async () => { throw new Error("boom"); }, 5000, undefined, "ana"), /boom/);
+    await assert.rejects(queuedRender(async () => { throw new Error("boom"); }, 5000, undefined, "ana"), /boom/);
+    assert.equal(await queuedRender(async () => 5, 5000, undefined, "ana"), 5);
+  });
 });
 
 describe("cola de renders PDF: petición cancelada (req.signal)", () => {

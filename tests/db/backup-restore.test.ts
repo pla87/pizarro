@@ -83,6 +83,8 @@ after(async () => {
 describe("copias completas", () => {
   test("copia → destino externo → restauración en una base y una carpeta vacías: todo igual", async () => {
     const owner = await makeUser({ name: "Persona Copia" });
+    // Una sesión abierta en la copia: al restaurar no vuelve (todo el mundo entra otra vez).
+    await db.session.create({ data: { id: "sesion-de-la-copia", userId: owner.id, expiresAt: new Date(Date.now() + 86400_000) } });
     const f = await makeProject({ owner });
     await makeTask(f, { title: "Tarea con adjunto «ñ» 日本" });
     // Ficheros como los de la app: adjuntos, miniaturas, copias de releases, documentos; y cosas que NO van.
@@ -126,13 +128,24 @@ describe("copias completas", () => {
     const ext2 = await syncExternal();
     assert.deepEqual(ext2.map((r) => [r.ok, r.uploaded, r.skipped]), [[true, 1, 5], [true, 1, 5]]);
     const expected = await fingerprint(baseUrl);
+    // Lo único que no vuelve igual: las sesiones (se cierran todas al restaurar).
+    const noSessions = (fp: Record<string, string>) => ({ ...fp, Session: "0:" });
+    const sessionsLeft = async (u: string) => {
+      const c = await connectPg(u);
+      try {
+        return (await c.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM "Session"`))[0]!.n;
+      } finally {
+        await c.end();
+      }
+    };
 
     // «Se pierde el disco»: base de datos nueva y UPLOAD_DIR vacía; se restaura desde S3.
     const url = await newDatabase();
     const fresh = await tmp();
     const res = await restoreBackup({ databaseUrl: url, source: parseSource("s3:latest", { localDir: path.join(fresh, "backups") }), key: Buffer.from(process.env.BACKUP_KEY!, "base64"), migrationsDir: MIGRATIONS, files: true, uploadRoot: fresh });
     assert.equal(res.files?.restored, 6);
-    assert.deepEqual(await fingerprint(url), expected);
+    assert.equal(await sessionsLeft(url), 0);
+    assert.deepEqual(noSessions(await fingerprint(url)), noSessions(expected));
     for (const [p, data] of Object.entries(files)) assert.ok((await readFile(path.join(fresh, p))).equals(data), p);
     assert.ok(!(await readdir(fresh)).includes("att3.bin.999.tmp"));
 
@@ -145,7 +158,8 @@ describe("copias completas", () => {
     const again = { databaseUrl: url, key: Buffer.from(process.env.BACKUP_KEY!, "base64"), migrationsDir: MIGRATIONS };
     await assert.rejects(restoreBackup({ ...again, source: parseSource("external:latest", { localDir: "/nada" }) }), /NO está vacía/);
     await restoreBackup({ ...again, source: parseSource("external:latest", { localDir: "/nada" }), force: true });
-    assert.deepEqual(await fingerprint(url), expected);
+    assert.equal(await sessionsLeft(url), 0);
+    assert.deepEqual(noSessions(await fingerprint(url)), noSessions(expected));
   });
 
   test("copia de una versión anterior: migra hasta la de la copia, carga y sigue migrando", async () => {

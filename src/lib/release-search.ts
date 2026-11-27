@@ -12,11 +12,22 @@ import { foldedContains } from "./search-accents";
 /** La consulta, aparte para poder comprobar su plan (tests/db/release-search.test.ts). */
 export function releaseSearchSql(projectId: string, q: string, limit: number): Prisma.Sql {
   const needle = foldedContains(q);
+  // Con menos de 3 letras no hay trigramas: el índice no sirve y plegar el texto de cada release (hasta 200 KB) sale caro
+  // mientras se escribe. Entonces solo se busca en el título.
+  if (q.trim().length < MIN_CONTENT_SEARCH) {
+    return Prisma.sql`
+    SELECT "id" FROM "Release" WHERE "projectId" = ${projectId}
+      AND search_fold("title") LIKE ${needle}
+    ORDER BY "deployedAt" DESC LIMIT ${limit}`;
+  }
   return Prisma.sql`
     SELECT "id" FROM "Release" WHERE "projectId" = ${projectId}
       AND (search_fold("title") LIKE ${needle} OR search_fold("content") LIKE ${needle})
     ORDER BY "deployedAt" DESC LIMIT ${limit}`;
 }
+
+/** Letras a partir de las que la búsqueda mira también el texto de las releases (no solo el título). */
+const MIN_CONTENT_SEARCH = 3;
 
 /** Ids de las releases del proyecto que coinciden, de la más reciente a la más antigua (como mucho `limit`). */
 export async function searchReleaseIds(projectId: string, q: string, limit: number): Promise<string[]> {

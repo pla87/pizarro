@@ -38,9 +38,24 @@ fi
 # RENDER_EXTERNAL_URL o https://<FLY_APP_NAME>.fly.dev; lo dice el log del servidor, src/lib/app-url.ts).
 [ -n "$APP_URL" ] || [ -n "$RAILWAY_PUBLIC_DOMAIN" ] || [ -n "$RENDER_EXTERNAL_URL" ] || [ -n "$FLY_APP_NAME" ] || echo "[start] AVISO: APP_URL no está definida; los enlaces de los avisos y Google no funcionarán bien."
 
+# Apagado (SIGTERM/SIGINT de Docker o Railway) mientras corren las migraciones o el arranque: este sh es el proceso 1 del
+# contenedor y, sin trap, ignoraba la señal; Docker esperaba el plazo entero y lo mataba con SIGKILL a mitad de una
+# migración (que quedaba «a medias», P3009). Ahora se deja terminar el paso en curso y se sale sin arrancar el servidor.
+STOP=""
+trap 'STOP=1; echo "[start] Apagado pedido: se termina el paso en curso y se sale."' TERM INT
+# Ejecuta un paso en segundo plano y espera a que termine de verdad (wait vuelve antes si llega una señal).
+run_step() {
+  "$@" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do wait "$pid" || true; done
+  wait "$pid"
+}
+stop_if_asked() { if [ -n "$STOP" ]; then exit 143; fi; }
+
 # Espera a que PostgreSQL responda (hasta 3 min; sin espera si ya responde) y aplica las migraciones
 # (migrator/). Si falla, explica en español qué comprobar (base caída, migración a medias: P3009).
-if ! node scripts/migrate.mjs; then
+if ! run_step node scripts/migrate.mjs; then
+  stop_if_asked
   # Espera antes de salir para no reiniciar en bucle rápido.
   sleep 20
   exit 1
@@ -49,10 +64,14 @@ fi
 # Sincroniza changelog.json → AppVersionLog y crea el admin inicial si no hay usuarios. Si falla (p. ej. SEED_ADMIN_PASSWORD
 # demasiado corta), la misma espera que las migraciones: sin ella, Railway agotaba sus reintentos en segundos y Docker
 # reiniciaba en bucle rápido.
-if ! node dist/boot.mjs; then
+stop_if_asked
+if ! run_step node dist/boot.mjs; then
+  stop_if_asked
   sleep 20
   exit 1
 fi
+stop_if_asked
+trap - TERM INT
 
 echo "[start] Arrancando servidor en el puerto ${PORT:-3000}"
 # Apagado ordenado: Next.js no gestiona SIGTERM/SIGINT; lo hace src/instrumentation.ts (guarda los registros y espera a los emails).

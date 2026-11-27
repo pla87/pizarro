@@ -20,6 +20,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { absoluteDataPaths } from "./local-paths.mjs";
+import { pendingMigrationsReason } from "./migrate.mjs";
 import { shutdownAsIfSigterm, watchParent } from "./parent-watch.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -68,6 +69,15 @@ if (process.env.npm_lifecycle_event) {
       shutdownAsIfSigterm();
     },
   });
+}
+
+// Sin migrar (se olvidó `npx prisma migrate deploy` tras actualizar), el servidor arrancaba con el esquema viejo y las
+// páginas que leen columnas nuevas daban 500. Se para con un aviso claro (el contenedor migra solo: scripts/start.sh).
+const pending = await pendingMigrationsReason(fileURLToPath(new URL("..", import.meta.url)), process.env.DATABASE_URL ?? "").catch(() => null);
+if (pending) {
+  console.error(`[start] La base de datos no está al día con las migraciones (${pending}).`);
+  console.error("[start] Aplícalas antes de arrancar: npx prisma migrate deploy");
+  process.exit(1);
 }
 
 const booted = await runBootChild();

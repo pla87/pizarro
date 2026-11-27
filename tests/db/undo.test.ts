@@ -118,6 +118,15 @@ describe("deshacer acciones propias", () => {
     assert.equal(await db.task.count({ where: { recurrenceFromId: task.id } }), 0);
   });
 
+  test("archivar una repetida ya terminada cuya siguiente aparición se borró: no vuelve a nacer", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { recurrence: "WEEKLY", dueDate: new Date("2026-01-10T00:00:00Z") });
+    const [next] = expectOk(await moveTask(task.id, f.columns.done, null, null)).spawned;
+    expectOk(await deleteTask(next!.id));
+    assert.equal(expectOk(await archiveTask(task.id)).spawned.length, 0);
+    assert.equal(await db.task.count({ where: { projectId: f.project.id, archivedAt: null } }), 0);
+  });
+
   test("borrar una repetida que ya tiene siguiente: deshacer (y rehacer y deshacer) le devuelve la serie, sin duplicarla", async () => {
     const { f } = await setup();
     const task = await makeTask(f, { recurrence: "WEEKLY", dueDate: new Date("2026-01-10T00:00:00Z") });
