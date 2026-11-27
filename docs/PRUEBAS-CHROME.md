@@ -78,7 +78,7 @@ Estado tras la ronda 70 (v1.73.1):
 - Lo creado en la instalación de prueba por esas sesiones (no se ha borrado nada; preguntar antes): proyecto «Casa R69»
   y, en «Proyecto de prueba», la columna «Proveedor», Persona Prueba como miembro y la etiqueta «informes».
 
-## 1. Pruebas en real de la v1.73.0 a la v1.75.0 (instalación de prueba)
+## 1. Pruebas en real de la v1.73.0 a la v1.75.1 (instalación de prueba)
 
 Los puntos con ventana privada, Ctrl+V de una imagen de verdad, una ventana muy ancha o el móvil los hace el
 propietario: el prompt le pide que los haga y apunta lo que le diga.
@@ -126,6 +126,9 @@ Quiero que compruebes en real las novedades de Pizarro v1.73.0, v1.73.1, v1.74.0
 36. «Varias tareas» con una tarea abierta (v1.75.0): con la ventana ancha (≥1024 px), abre una tarea: «Nueva tarea» y «Varias tareas» se ven nítidos encima del fondo; pulsa «Varias tareas»: se abre «Crear varias tareas» al lado. Con las dos abiertas, su descripción dice «Ya hay dos tareas abiertas».
 37. «Casa y familia» (v1.75.0): crea un proyecto con esa plantilla: sus etiquetas son «Toda la familia» y «Urgente» (sin «Persona 1/2»).
 38. Generar release y plan (v1.75.0): en «Generar release», el botón «Generar» tarda un instante en activarse (espera al número) y las notas empiezan por «R<n>». En «Generar plan de trabajo», igual, y al cambiar la cabecera no salen dos.
+39. Tope de WhatsApp (v1.75.1): en Administración → Integraciones → 3, junto a WhatsApp está «Tope de avisos al día» (vacío = 200) y el estado dice «Hoy: N de M avisos». Pon 0: da error; pon 5 y guarda: se conserva.
+40. Selección grande (v1.75.1): no hace falta llegar a 500; comprueba solo que mover, archivar y borrar varias tarjetas seleccionadas siguen funcionando y se deshacen con Ctrl+Z.
+41. Mac (v1.75.1, solo si usas Mac): en la barra de formato de una descripción, el globo de Negrita dice «(⌘B)»; en la ayuda de atajos («?»), «Espacio» sale en español.
 
 Informe en español: para cada punto, «bien», «mal» o «no se pudo», con el texto exacto de los avisos y, si algo falla, una captura descrita. Al final, lo que te haya parecido confuso. No borres nada de lo creado: pregúntame.
 ```
