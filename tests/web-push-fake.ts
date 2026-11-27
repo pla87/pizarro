@@ -64,24 +64,32 @@ export function checkVapid(authorization: string | undefined, origin: string, no
 
 export interface PushHit {
   path: string;
+  /** Cuándo llegó la petición (antes de leer el cuerpo), para comprobar que van en paralelo. */
+  at: number;
   headers: IncomingMessage["headers"];
   body: Buffer;
 }
 
-/** Servidor push falso (http en 127.0.0.1): guarda cada POST y responde `status(path)` (201 por defecto). */
+/** Servidor push falso (http en 127.0.0.1): guarda cada POST y responde `status(path)` (201 por defecto; 0 = no responde nunca). */
 export async function fakePushServer(status: (path: string) => number = () => 201): Promise<{ hits: PushHit[]; url: string; close: () => Promise<void>; server: Server }> {
   const hits: PushHit[] = [];
   const server = createServer((req, res) => {
+    const at = Date.now();
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
       const path = req.url ?? "/";
-      hits.push({ path, headers: req.headers, body: Buffer.concat(chunks) });
-      res.statusCode = status(path);
+      hits.push({ path, at, headers: req.headers, body: Buffer.concat(chunks) });
+      const code = status(path);
+      if (!code) return; // cuelga: el cliente debe cortar con su tiempo máximo
+      res.statusCode = code;
       res.end();
     });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const { port } = server.address() as AddressInfo;
-  return { hits, url: `http://127.0.0.1:${port}`, server, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return { hits, url: `http://127.0.0.1:${port}`, server, close: () => new Promise<void>((r) => {
+    server.closeAllConnections();
+    server.close(() => r());
+  }) };
 }

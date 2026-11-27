@@ -120,7 +120,7 @@ export function PushSection({ initial }: { initial: PushView }) {
       const res = await removePushDevice(id);
       if (!res.ok) toast(res.error, "error");
       // El de este navegador: también se le quita la suscripción aquí.
-      if (hash === hereHash) await (await currentPushSubscription().catch(() => null))?.unsubscribe().catch(() => {});
+      if (res.ok && hash === hereHash) await (await currentPushSubscription().catch(() => null))?.unsubscribe().catch(() => {});
       await refresh();
       if (res.ok) toast(t("Dispositivo quitado."), "success");
     });

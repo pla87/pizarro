@@ -445,7 +445,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `rotate-keys` lo cubre. Un host de servicio push nuevo se añade a `PUSH_HOSTS`/`PUSH_HOST_SUFFIXES` (se comprueba al
   suscribir y al enviar; `fetch` con `redirect: "error"` y tiempo máximo). 404/410 borra la suscripción. Preferencias por
   tipo en `User.pushNotify*` (mismos grupos que `channelWants`), tope de 30/h por persona (`notify:push:`) y 10
-  dispositivos por persona. Al cerrar sesión, el navegador se desuscribe (`forgetPushOnThisDevice`). Pruebas:
+  dispositivos por persona. Cada suscripción va atada a su sesión (`sessionId`, clave ajena en cascada: cualquier vía que
+  borre la fila de `Session` corta sus avisos; si caducó sin borrarse, no se envía) y a la clave VAPID con la que se hizo
+  (`vapidPublicKey`; si no coincide, se relee la clave y, si sigue sin coincidir, se borra). Si la clave VAPID no se puede
+  descifrar, el proceso que la rehace borra todas las suscripciones en la misma transacción. Envío a los dispositivos de
+  una persona en paralelo (`Promise.allSettled`, 5 s como mucho) y, en `deliver`, en paralelo con el email y Telegram.
+  Pasar una suscripción a otra cuenta exige las mismas claves p256dh/auth. Al cerrar sesión, además, el navegador se
+  desuscribe (`forgetPushOnThisDevice`). Pruebas:
   `tests/push.test.ts` (vector del RFC 8291) y `tests/db/push.test.ts` (servidor push falso con `tests/web-push-fake.ts`).
 
 ## Tareas de fondo y copias

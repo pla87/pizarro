@@ -145,6 +145,8 @@ model Session {
   userAgent String?
   ip        String?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Avisos push activados desde esta sesión: cerrarla (o que caduque y se borre) los corta.
+  pushSubscriptions PushSubscription[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -1167,12 +1169,19 @@ model PushSubscription {
   host         String
   /// User-Agent del navegador al suscribirse (recortado), para «Chrome en Android».
   userAgent    String    @default("")
+  /// Sesión desde la que se activó: al cerrarla por cualquier vía (salir, «Cerrar las demás», cambio de contraseña,
+  /// limpieza de las caducadas) la clave ajena borra la suscripción; si caducó y aún no se ha borrado, no se le envía.
+  sessionId    String
+  /// Clave pública VAPID con la que se suscribió: si la instalación cambia de clave, no se le envía (y se borra).
+  vapidPublicKey String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   lastSentAt   DateTime?
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([sessionId])
 }
 
 /// Código de un solo uso de «Conectar Telegram» (t.me/<bot>?start=<código>). Solo se guarda su HMAC; caduca en minutos.

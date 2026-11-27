@@ -4,7 +4,7 @@
 // borrar la cuenta, envío según las preferencias por tipo, 410 = suscripción caducada, menciones en notas y «Probar».
 import assert from "node:assert/strict";
 import { after, afterEach, before, beforeEach, describe, test } from "node:test";
-import { afterDone, asUser, db, expectFail, expectOk, makeProject, makeTask, makeUser } from "./helpers";
+import { afterDone, asUser, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { fakeBrowser, fakePushServer, checkVapid, type FakeBrowser, type PushHit } from "../web-push-fake";
 
 process.env.APP_URL = "https://pizarro.example.com";
@@ -16,7 +16,9 @@ const { createNote, saveNote } = await import("../../src/actions/documents");
 const { mentionToken } = await import("../../src/lib/mentions");
 const { decryptSecret } = await import("../../src/lib/crypto");
 const { flushLogs } = await import("../../src/lib/log");
-const { PUSH_VAPID_KEY } = await import("../../src/lib/web-push-core");
+const { PUSH_VAPID_KEY, PUSH_TIMEOUT_MS } = await import("../../src/lib/web-push-core");
+const { revokeOtherSessions, revokeSession } = await import("../../src/actions/profile");
+const { currentSessionId } = await import("../../src/lib/session");
 
 let server: Awaited<ReturnType<typeof fakePushServer>>;
 /** Respuesta del servicio push falso por ruta del endpoint (201 si no se dice otra cosa). */
@@ -44,7 +46,7 @@ beforeEach(() => {
     }
     assert.equal(init?.redirect, "error", "sin seguir redirecciones");
     assert.ok(init?.signal, "con tiempo máximo");
-    return realFetch(`${server.url}/${url.hostname}${url.pathname}${url.search}`, { method: init?.method, headers: init?.headers, body: init?.body });
+    return realFetch(`${server.url}/${url.hostname}${url.pathname}${url.search}`, { method: init?.method, headers: init?.headers, body: init?.body, signal: init?.signal });
   }) as typeof fetch;
 });
 afterEach(() => {
@@ -267,5 +269,121 @@ describe("avisos push: envío", () => {
     const [msg] = received(b);
     assert.equal(msg!.title, "Aviso de prueba de Pizarro");
     assert.equal(msg!.url, "/settings?tab=avisos");
+  });
+});
+
+describe("avisos push: revisión (clave nueva, paralelo, sesiones, cambio de cuenta)", () => {
+  test("si la clave VAPID no se puede descifrar, se crea otra y se borran todas las suscripciones (y lo dice Logs)", async () => {
+    const ana = await makeUser();
+    expectOk(await subscribe(ana, browser()));
+    expectOk(await subscribe(ana, browser()));
+    const before = await vapidKeys();
+    const total = await db.pushSubscription.count();
+    // Como si ENCRYPTION_KEY hubiera cambiado sin la anterior: el valor guardado ya no se abre.
+    await db.appState.update({ where: { key: PUSH_VAPID_KEY }, data: { value: "v1.ilegible" } });
+    forgetVapidKeys();
+    const after = await vapidKeys();
+    assert.notEqual(after.publicKey, before.publicKey);
+    assert.equal(await db.pushSubscription.count(), 0);
+    await flushLogs();
+    const log = await db.appLog.findFirstOrThrow({ where: { action: "push.vapidReset" }, orderBy: { createdAt: "desc" } });
+    assert.equal((log.details as { removed: number }).removed, total);
+    // La página ya da la clave nueva y suscribir vuelve a funcionar.
+    assert.equal(expectOk(await asUser(ana, () => pushSetup())).publicKey, after.publicKey);
+    expectOk(await subscribe(ana, browser()));
+  });
+
+  test("una suscripción hecha con otra clave VAPID no recibe nada y se quita; las demás, sí", async () => {
+    const ana = await makeUser();
+    const bea = await makeUser();
+    const f = await makeProject({ members: [ana, bea] });
+    const task = await makeTask(f);
+    const old = browser();
+    const ok = browser();
+    const { id } = expectOk(await subscribe(bea, old));
+    expectOk(await subscribe(bea, ok));
+    await db.pushSubscription.update({ where: { id }, data: { vapidPublicKey: "otra-clave" } });
+    await notifyTask({ type: "ASSIGNED", actorId: ana.id, taskId: task.id, projectId: f.project.id, recipientIds: [bea.id], excerpt: task.title, immediate: true });
+    assert.equal(received(old).length, 0);
+    assert.equal(received(ok).length, 1);
+    assert.equal(await db.pushSubscription.count({ where: { id } }), 0);
+  });
+
+  test("tiempo máximo y en paralelo: un servicio colgado corta a los 5 s sin frenar a los demás dispositivos", async () => {
+    assert.equal(PUSH_TIMEOUT_MS, 5_000);
+    const ana = await makeUser();
+    const bea = await makeUser();
+    const f = await makeProject({ members: [ana, bea] });
+    const task = await makeTask(f);
+    const slow1 = browser();
+    const slow2 = browser("web.push.apple.com");
+    const fast = browser("updates.push.services.mozilla.com");
+    for (const b of [slow1, slow2, fast]) expectOk(await subscribe(bea, b));
+    statusFor[slow1.path] = 0;
+    statusFor[slow2.path] = 0;
+    await notifyTask({ type: "ASSIGNED", actorId: ana.id, taskId: task.id, projectId: f.project.id, recipientIds: [bea.id], excerpt: task.title, immediate: true });
+    assert.equal(received(fast).length, 1);
+    const hung = server.hits.filter((h) => h.path === slow1.path || h.path === slow2.path);
+    assert.equal(hung.length, 2);
+    // Los dos colgados salieron a la vez (en serie, el segundo habría esperado al tiempo máximo del primero).
+    assert.ok(Math.abs(hung[0]!.at - hung[1]!.at) < PUSH_TIMEOUT_MS / 2, "en paralelo");
+    const n = await db.notification.findFirstOrThrow({ where: { userId: bea.id, taskId: task.id } });
+    assert.match(n.deliveryError ?? "", /push: timeout, timeout/);
+    assert.ok(n.pushSentAt, "el que respondió cuenta como enviado");
+    // Un tiempo agotado no borra la suscripción.
+    assert.equal(await db.pushSubscription.count({ where: { userId: bea.id } }), 3);
+  });
+
+  test("cerrar una sesión corta los avisos de ese dispositivo («Cerrar las demás», cerrar una, caducada)", async () => {
+    const ana = await makeUser();
+    const bea = await makeUser();
+    const f = await makeProject({ members: [ana, bea] });
+    const phone = browser();
+    const laptop = browser("web.push.apple.com");
+    const tablet = browser("updates.push.services.mozilla.com");
+    // Tres sesiones de Bea, cada una con su navegador.
+    await loginAs(bea);
+    expectOk(await subscribePush({ endpoint: phone.endpoint, keys: phone.keys }));
+    const phoneSession = (await currentSessionId())!;
+    await loginAs(bea);
+    expectOk(await subscribePush({ endpoint: tablet.endpoint, keys: tablet.keys }));
+    const tabletSession = (await currentSessionId())!;
+    await loginAs(bea);
+    expectOk(await subscribePush({ endpoint: laptop.endpoint, keys: laptop.keys }));
+    assert.equal(await db.pushSubscription.count({ where: { userId: bea.id } }), 3);
+    // Desde el portátil cierra la del móvil: sus avisos se cortan.
+    expectOk(await revokeSession(phoneSession));
+    assert.equal(await db.pushSubscription.count({ where: { userId: bea.id, sessionId: phoneSession } }), 0);
+    // La de la tableta caduca sola (aún sin borrar): no se le envía y se quita.
+    await db.session.update({ where: { id: tabletSession }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    const task = await makeTask(f);
+    await notifyTask({ type: "ASSIGNED", actorId: ana.id, taskId: task.id, projectId: f.project.id, recipientIds: [bea.id], excerpt: task.title, immediate: true });
+    assert.equal(received(tablet).length, 0);
+    assert.equal(received(laptop).length, 1);
+    assert.equal(received(phone).length, 0);
+    assert.equal(await db.pushSubscription.count({ where: { sessionId: tabletSession } }), 0);
+    // Otra sesión nueva con su navegador, y «Cerrar las demás» desde el portátil: solo queda el portátil.
+    const other = browser();
+    await asUser(bea, () => subscribePush({ endpoint: other.endpoint, keys: other.keys }));
+    assert.equal(await db.pushSubscription.count({ where: { userId: bea.id } }), 2);
+    await loginAs(bea);
+    expectOk(await subscribePush({ endpoint: laptop.endpoint, keys: laptop.keys }));
+    expectOk(await revokeOtherSessions());
+    const left = await db.pushSubscription.findMany({ where: { userId: bea.id }, select: { endpointHash: true } });
+    assert.equal(left.length, 1);
+  });
+
+  test("el endpoint de otra persona con claves inventadas no le quita su dispositivo", async () => {
+    const ana = await makeUser();
+    const mallory = await makeUser();
+    const b = browser();
+    expectOk(await subscribe(ana, b));
+    const fake = fakeBrowser();
+    expectFail(await subscribe(mallory, { endpoint: b.endpoint, keys: fake.keys }), /no válida/);
+    assert.equal(await db.pushSubscription.count({ where: { userId: ana.id } }), 1);
+    assert.equal(await db.pushSubscription.count({ where: { userId: mallory.id } }), 0);
+    // Con las mismas claves (el mismo navegador, otra cuenta), sí pasa.
+    expectOk(await subscribe(mallory, b));
+    assert.equal(await db.pushSubscription.count({ where: { userId: mallory.id } }), 1);
   });
 });

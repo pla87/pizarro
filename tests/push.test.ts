@@ -154,3 +154,13 @@ test("texto del aviso push: quién y qué tarea (o nota), el proyecto y la ruta;
   const en = pushNoticeMessage({ ...base, type: "ASSIGNED", excerpt: "" }, makeT("en"), "https://pizarro.example.com", "/icon.png", "n3");
   assert.match(en.title, /“Preparar «la» demo”/);
 });
+
+test("cabeceras: un JWT ya firmado (guardado por servicio) se reutiliza tal cual; tiempo máximo de 5 s", () => {
+  const keys = core.generateVapidKeys();
+  const endpoint = "https://web.push.apple.com/abc";
+  const jwt = core.vapidJwt(endpoint, "https://pizarro.example.com", keys, 1_800_000_000);
+  const h = core.pushRequestHeaders(endpoint, "https://pizarro.example.com", keys, { jwt });
+  assert.equal(h.Authorization, `vapid t=${jwt}, k=${keys.publicKey}`);
+  checkVapid(h.Authorization, "https://web.push.apple.com", 1_800_000_000);
+  assert.equal(core.PUSH_TIMEOUT_MS, 5_000);
+});

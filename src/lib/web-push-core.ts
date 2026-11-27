@@ -150,7 +150,7 @@ const VAPID_TTL_SEC = 12 * 60 * 60;
  * JWT VAPID para un servicio push: `aud` es el origen del endpoint, `sub` un contacto (mailto: o https:). Firma ES256
  * en el formato de JOSE (r‖s, 64 bytes).
  */
-function vapidJwt(endpoint: string, subject: string, keys: VapidKeys, nowSec: number = Math.floor(Date.now() / 1000)): string {
+export function vapidJwt(endpoint: string, subject: string, keys: VapidKeys, nowSec: number = Math.floor(Date.now() / 1000)): string {
   const header = b64url(Buffer.from(JSON.stringify({ typ: "JWT", alg: "ES256" })));
   const claims = b64url(Buffer.from(JSON.stringify({ aud: new URL(endpoint).origin, exp: nowSec + VAPID_TTL_SEC, sub: subject })));
   const input = `${header}.${claims}`;
@@ -165,9 +165,9 @@ export function vapidSubject(contactEmail: string, appUrl: string): string {
 }
 
 /** Cabeceras del POST al servicio push (RFC 8030 + 8291 + 8292). TTL: cuánto puede guardar el aviso si el dispositivo está apagado. */
-export function pushRequestHeaders(endpoint: string, subject: string, keys: VapidKeys, opts: { ttlSec?: number; urgency?: "normal" | "high"; nowSec?: number } = {}): { Authorization: string; "Content-Encoding": string; "Content-Type": string; TTL: string; Urgency: string } {
+export function pushRequestHeaders(endpoint: string, subject: string, keys: VapidKeys, opts: { ttlSec?: number; urgency?: "normal" | "high"; nowSec?: number; jwt?: string } = {}): { Authorization: string; "Content-Encoding": string; "Content-Type": string; TTL: string; Urgency: string } {
   return {
-    Authorization: `vapid t=${vapidJwt(endpoint, subject, keys, opts.nowSec)}, k=${keys.publicKey}`,
+    Authorization: `vapid t=${opts.jwt ?? vapidJwt(endpoint, subject, keys, opts.nowSec)}, k=${keys.publicKey}`,
     "Content-Encoding": "aes128gcm",
     "Content-Type": "application/octet-stream",
     TTL: String(opts.ttlSec ?? 24 * 60 * 60),
@@ -223,6 +223,6 @@ export const PUSH_DEVICES_MAX = 10;
 /** Avisos push por persona y hora (como Telegram): una avalancha de avisos no se convierte en una avalancha de notificaciones. */
 export const PUSH_LIMIT_PER_HOUR = 30;
 /** Tiempo máximo de cada envío a un servicio push. */
-export const PUSH_TIMEOUT_MS = 10_000;
+export const PUSH_TIMEOUT_MS = 5_000;
 /** Clave de AppState con el par VAPID de la instalación (la JWK privada, cifrada con ENCRYPTION_KEY). */
 export const PUSH_VAPID_KEY = "push.vapidEnc";

@@ -266,6 +266,7 @@ export const mensajeria: Record<string, string> = {
   "El navegador ha dado una suscripción no válida. Vuelve a intentarlo.": "The browser returned an invalid subscription. Try again.",
   "Ese dispositivo ya no está en la lista.": "That device is no longer on the list.",
   "Activa primero los avisos en este dispositivo.": "Turn on notifications on this device first.",
+  "Vuelve a iniciar sesión.": "Sign in again.",
   "Activó los avisos push en {device}": "Turned on push notifications on {device}",
   "Renovó los avisos push en {device}": "Renewed push notifications on {device}",
   "Desactivó los avisos push en este dispositivo": "Turned off push notifications on this device",
@@ -277,7 +278,7 @@ export const mensajeria: Record<string, string> = {
   "Fallo al enviar el aviso push a {name} ({service}): {error}": "Failed to send the push notification to {name} ({service}): {error}",
   "Tope de {max} avisos push por hora alcanzado para {name}: los siguientes avisos de esta hora solo quedan en la app":
     "Limit of {max} push notifications per hour reached for {name}: further notifications this hour only stay in the app",
-  "Avisos push: no se pudo descifrar la clave de la instalación (¿cambió ENCRYPTION_KEY?) y se ha creado otra; cada persona tiene que volver a activar los avisos en sus dispositivos":
-    "Push notifications: the installation key could not be decrypted (did ENCRYPTION_KEY change?) and a new one was created; everyone has to turn notifications on again on their devices",
+  "Avisos push: no se pudo descifrar la clave de la instalación (¿cambió ENCRYPTION_KEY?) y se ha creado otra; se han quitado los {n} dispositivos suscritos y cada persona tiene que volver a activar los avisos en los suyos":
+    "Push notifications: the installation key could not be decrypted (did ENCRYPTION_KEY change?) and a new one was created; the {n} subscribed devices were removed and everyone has to turn notifications on again on theirs",
   "{n} aviso(s) de mención en una nota creados ({external} con envío externo al momento)": "{n} note mention notification(s) created ({external} sent outside right away)",
 };

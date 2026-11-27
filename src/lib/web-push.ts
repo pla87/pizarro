@@ -12,7 +12,7 @@ import type { NotificationKind } from "./notification-text";
 import { deviceLabel } from "./user-agent";
 import type { T } from "../i18n/core";
 import {
-  encryptPushPayload, generateVapidKeys, PUSH_DEVICES_MAX, PUSH_TIMEOUT_MS, PUSH_VAPID_KEY, pushEndpointHost, pushMessageJson, pushOutcome, pushRequestHeaders, pushServiceName, validPushKeys, vapidFromJwk, vapidSubject,
+  encryptPushPayload, generateVapidKeys, PUSH_DEVICES_MAX, PUSH_TIMEOUT_MS, PUSH_VAPID_KEY, pushEndpointHost, pushMessageJson, pushOutcome, pushRequestHeaders, pushServiceName, validPushKeys, vapidFromJwk, vapidJwt, vapidSubject,
   type PushKeys, type PushMessage, type VapidKeys,
 } from "./web-push-core";
 
@@ -32,11 +32,15 @@ async function readOrCreateVapid(): Promise<VapidKeys> {
     try {
       return vapidFromJwk(JSON.parse(decryptSecret(row.value)));
     } catch {
-      // Ninguna clave de ENCRYPTION_KEY la abre (se cambió sin la anterior): se crea otra. Los dispositivos suscritos con
-      // la anterior dejan de recibir avisos (sus claves tampoco se pueden leer y se borran al intentar enviarles).
+      // Ninguna clave de ENCRYPTION_KEY la abre (se cambió sin la anterior): se crea otra. Las suscripciones están atadas a
+      // la clave pública anterior (el servicio push rechazaría la firma nueva), así que se borran todas en la misma
+      // transacción: solo el proceso que gana el cambio (la fila sigue con el valor que leyó) las borra.
       const fresh = generateVapidKeys();
-      const { count } = await db.appState.updateMany({ where: { key: PUSH_VAPID_KEY, value: row.value }, data: { value: encryptSecret(JSON.stringify(fresh.privateJwk)) } });
-      if (count) logEvent({ category: "notify", level: "warn", action: "push.vapidReset", label: { k: "Avisos push: no se pudo descifrar la clave de la instalación (¿cambió ENCRYPTION_KEY?) y se ha creado otra; cada persona tiene que volver a activar los avisos en sus dispositivos" } });
+      const removed = await db.$transaction(async (tx) => {
+        const { count } = await tx.appState.updateMany({ where: { key: PUSH_VAPID_KEY, value: row.value }, data: { value: encryptSecret(JSON.stringify(fresh.privateJwk)) } });
+        return count ? (await tx.pushSubscription.deleteMany({})).count : null;
+      });
+      if (removed !== null) logEvent({ category: "notify", level: "warn", action: "push.vapidReset", label: { k: "Avisos push: no se pudo descifrar la clave de la instalación (¿cambió ENCRYPTION_KEY?) y se ha creado otra; se han quitado los {n} dispositivos suscritos y cada persona tiene que volver a activar los avisos en los suyos", p: { n: removed } }, details: { removed } });
       return readOrCreateVapid();
     }
   }
@@ -59,7 +63,7 @@ export async function vapidKeys(): Promise<VapidKeys> {
   return s.loading;
 }
 
-/** Olvida la copia en memoria (pruebas y rotación). */
+/** Olvida la copia en memoria: la próxima vez se lee de la base (las pruebas, y el envío si una suscripción es de otra clave). */
 export function forgetVapidKeys(): void {
   store().keys = null;
 }
@@ -80,6 +84,16 @@ type PushUser = Parameters<typeof pushPrefsOf>[0] & { _count: { pushSubscription
 /** ¿Sale este aviso por push? Con algún dispositivo suscrito y el tipo marcado en sus preferencias. */
 export const pushWanted = (type: NotificationKind, u: PushUser): boolean => u._count.pushSubscriptions > 0 && channelWants(type, pushPrefsOf(u));
 
+/** ¿Son las mismas claves? (para dejar pasar una suscripción de una cuenta a otra solo desde el mismo navegador). */
+function sameKeys(enc: string, keys: PushKeys): boolean {
+  try {
+    const saved = JSON.parse(decryptSecret(enc)) as Partial<PushKeys>;
+    return saved.p256dh === keys.p256dh && saved.auth === keys.auth;
+  } catch {
+    return false;
+  }
+}
+
 export class PushSubscribeError extends Error {
   constructor(readonly reason: "service" | "keys" | "limit") {
     super(reason);
@@ -87,20 +101,24 @@ export class PushSubscribeError extends Error {
 }
 
 /**
- * Guarda (o renueva) la suscripción de este navegador para `userId`. Solo servicios push de la lista cerrada y claves
- * válidas. Si el mismo navegador estaba suscrito con otra cuenta (dos personas en el mismo ordenador), pasa a esta.
- * Como mucho PUSH_DEVICES_MAX dispositivos por persona.
+ * Guarda (o renueva) la suscripción de este navegador para `userId`, atada a la sesión `sessionId` (cerrarla la borra) y
+ * a la clave VAPID actual. Solo servicios push de la lista cerrada y claves válidas. Si el mismo navegador estaba
+ * suscrito con otra cuenta (dos personas en el mismo ordenador), pasa a esta solo con las mismas claves p256dh/auth: con
+ * el endpoint de otra persona y claves inventadas no se le puede quitar su dispositivo. Como mucho PUSH_DEVICES_MAX
+ * dispositivos por persona.
  */
-export async function savePushSubscription(userId: string, input: { endpoint: unknown; keys: unknown }, userAgent: string): Promise<{ id: string; created: boolean }> {
+export async function savePushSubscription(userId: string, sessionId: string, input: { endpoint: unknown; keys: unknown }, userAgent: string): Promise<{ id: string; created: boolean }> {
   const host = pushEndpointHost(input.endpoint);
   if (!host) throw new PushSubscribeError("service");
   const keys = validPushKeys(input.keys);
   if (!keys) throw new PushSubscribeError("keys");
   const endpoint = input.endpoint as string;
   const hash = endpointHash(endpoint);
-  const data = { userId, endpointEnc: encryptSecret(endpoint), keysEnc: encryptSecret(JSON.stringify(keys)), host, userAgent: userAgent.slice(0, 300) };
+  const vapid = await vapidKeys();
+  const data = { userId, sessionId, vapidPublicKey: vapid.publicKey, endpointEnc: encryptSecret(endpoint), keysEnc: encryptSecret(JSON.stringify(keys)), host, userAgent: userAgent.slice(0, 300) };
   return db.$transaction(async (tx) => {
-    const prev = await tx.pushSubscription.findUnique({ where: { endpointHash: hash }, select: { id: true, userId: true } });
+    const prev = await tx.pushSubscription.findUnique({ where: { endpointHash: hash }, select: { id: true, userId: true, keysEnc: true } });
+    if (prev && prev.userId !== userId && !sameKeys(prev.keysEnc, keys)) throw new PushSubscribeError("keys");
     if (prev?.userId === userId) {
       await tx.pushSubscription.update({ where: { id: prev.id }, data });
       return { id: prev.id, created: false };
@@ -126,9 +144,31 @@ export async function pushIcon(): Promise<string> {
   return appIconUrl(await getAppIcon(), "icon-192.png");
 }
 
+const SUBJECT_TTL_MS = 5 * 60_000;
+/** JWT VAPID por servicio (aud), reutilizado unas horas (caduca a las 12 h): una firma por servicio, no por aviso. */
+const JWT_REUSE_SEC = 6 * 60 * 60;
+type PushCache = { subject: { value: string; at: number } | null; jwts: Map<string, { jwt: string; until: number }> };
+const cache = (): PushCache => ((globalThis as unknown as Record<string, PushCache | undefined>).__pizarroPushCache ??= { subject: null, jwts: new Map() });
+
+/** Contacto VAPID (email público de contacto o la dirección de la app), guardado 5 minutos en memoria. */
 async function subject(): Promise<string> {
+  const c = cache();
+  if (c.subject && Date.now() - c.subject.at < SUBJECT_TTL_MS) return c.subject.value;
   const legal = await getLegalSettings().catch(() => ({ email: "" }));
-  return vapidSubject(legal.email, appUrl());
+  c.subject = { value: vapidSubject(legal.email, appUrl()), at: Date.now() };
+  return c.subject.value;
+}
+
+function cachedJwt(endpoint: string, sub: string, vapid: VapidKeys): string {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const key = `${new URL(endpoint).origin}|${sub}|${vapid.publicKey}`;
+  const hit = cache().jwts.get(key);
+  if (hit && hit.until > nowSec) return hit.jwt;
+  const jwt = vapidJwt(endpoint, sub, vapid, nowSec);
+  const jwts = cache().jwts;
+  if (jwts.size > 50) jwts.clear();
+  jwts.set(key, { jwt, until: nowSec + JWT_REUSE_SEC });
+  return jwt;
 }
 
 /**
@@ -140,7 +180,7 @@ async function postPush(endpoint: string, keys: PushKeys, message: PushMessage, 
   try {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: pushRequestHeaders(endpoint, sub, vapid),
+      headers: pushRequestHeaders(endpoint, sub, vapid, { jwt: cachedJwt(endpoint, sub, vapid) }),
       body: new Uint8Array(encryptPushPayload(pushMessageJson(message), keys)),
       redirect: "error",
       signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
@@ -162,32 +202,41 @@ interface PushResult {
 }
 
 /**
- * Envía un aviso push a los dispositivos de una persona (todos o solo `onlyIds`). Las suscripciones caducadas (404/410)
- * o ilegibles se borran. Cada resultado queda en Logs con el servicio (Google, Apple…), nunca con el endpoint.
+ * Envía un aviso push a todos los dispositivos de una persona a la vez (como mucho PUSH_TIMEOUT_MS en total). Se borran
+ * las suscripciones caducadas (404/410), ilegibles, de una sesión ya caducada o de otra clave VAPID. Cada resultado queda
+ * en Logs con el servicio (Google, Apple…), nunca con el endpoint.
  */
 export async function sendPushToUser(
   user: { id: string; name: string },
   message: PushMessage,
   log: { projectId?: string; details?: Record<string, unknown>; test?: boolean } = {},
 ): Promise<PushResult> {
-  const subs = await db.pushSubscription.findMany({ where: { userId: user.id }, select: { id: true, host: true, endpointEnc: true, keysEnc: true } });
+  const subs = await db.pushSubscription.findMany({ where: { userId: user.id }, select: { id: true, host: true, endpointEnc: true, keysEnc: true, vapidPublicKey: true, session: { select: { expiresAt: true } } } });
   const out: PushResult = { sent: 0, failed: 0, expired: 0, errors: [] };
   if (!subs.length) return out;
-  const [vapid, sub] = await Promise.all([vapidKeys(), subject()]);
+  const [first, sub] = await Promise.all([vapidKeys(), subject()]);
+  let vapid = first;
+  // Otra clave: puede que otro proceso la haya cambiado y esta copia en memoria sea la vieja; se relee una vez antes de
+  // dar por buenas las diferencias (si no, se borrarían las suscripciones nuevas).
+  if (subs.some((s) => s.vapidPublicKey !== vapid.publicKey)) {
+    forgetVapidKeys();
+    vapid = await vapidKeys();
+  }
   const base = { category: "notify", userId: user.id, userName: user.name, projectId: log.projectId };
-  for (const s of subs) {
+  const now = Date.now();
+  const one = async (s: (typeof subs)[number]) => {
     const details = { ...log.details, subscriptionId: s.id, service: s.host, test: log.test || undefined };
-    let endpoint: string;
-    let keys: PushKeys | null;
+    let endpoint = "";
+    let keys: PushKeys | null = null;
     try {
       endpoint = decryptSecret(s.endpointEnc);
       keys = validPushKeys(JSON.parse(decryptSecret(s.keysEnc)));
     } catch {
       keys = null;
-      endpoint = "";
     }
     const t0 = performance.now();
-    const r = keys ? await postPush(endpoint, keys, message, vapid, sub) : { outcome: "expired" as const, detail: "unreadable" };
+    const stale = s.session.expiresAt.getTime() <= now ? "session" : s.vapidPublicKey !== vapid.publicKey ? "vapid" : !keys ? "unreadable" : null;
+    const r = stale || !keys ? { outcome: "expired" as const, detail: stale ?? "unreadable" } : await postPush(endpoint, keys, message, vapid, sub);
     const durationMs = performance.now() - t0;
     if (r.outcome === "sent") {
       out.sent++;
@@ -201,6 +250,13 @@ export async function sendPushToUser(
       out.failed++;
       out.errors.push(r.detail);
       logEvent({ ...base, level: "error", action: "notify.pushFailed", label: { k: "Fallo al enviar el aviso push a {name} ({service}): {error}", p: { name: user.name, service: s.host, error: logText(r.detail) } }, durationMs, details });
+    }
+  };
+  // Todos a la vez: un servicio lento no retrasa a los demás dispositivos. Un fallo de la base cuenta como fallo.
+  for (const r of await Promise.allSettled(subs.map(one))) {
+    if (r.status === "rejected") {
+      out.failed++;
+      out.errors.push("error");
     }
   }
   return out;

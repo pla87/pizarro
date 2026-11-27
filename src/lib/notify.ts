@@ -155,6 +155,9 @@ export async function deliver(notificationIds: string[]): Promise<void> {
     const ok = await db.user.findMany({ where: mentionRecipientsWhere({ isPrivate }, userIds, projectId), select: { id: true } });
     for (const u of ok) allowed.add(`${projectId}:${u.id}`);
   }
+  // Los avisos push salen en paralelo con el resto (un servicio push lento no retrasa el email ni el Telegram de los
+  // demás destinatarios); al final se espera a todos y cada aviso guarda su resultado.
+  const finishing: Promise<void>[] = [];
   for (const n of rows) {
     const project = projectOf(n);
     if (!project || !n.user.active) continue;
@@ -167,7 +170,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
     const t = makeT(locale);
     // Mención en una nota: por email solo con «Al momento» (el resumen la recoge aparte) y por push; Telegram y WhatsApp no.
     if (n.document) {
-      await deliverNoteMention({ ...n, document: n.document }, project, locale, t);
+      finishing.push(deliverNoteMention({ ...n, document: n.document }, project, locale, t).catch((err) => console.error("[notify] envío", err)));
       continue;
     }
     const msg: MentionMessage = n.task
@@ -185,6 +188,9 @@ export async function deliver(notificationIds: string[]): Promise<void> {
     const update: { emailSentAt?: Date; whatsappSentAt?: Date; telegramSentAt?: Date; pushSentAt?: Date; deliveryError?: string } = {};
     const errors: string[] = [];
     const base = { category: "notify", userId: n.user.id, userName: n.user.name, projectId: project.id };
+    const pushing = deliverPush(n, msg, t, project.id, taskId, update, errors).catch((err) => {
+      errors.push(`push: ${(err as Error).message}`);
+    });
     if (emailEnabled() && emailWanted(n.type, n.user)) {
       const t0 = performance.now();
       try {
@@ -239,13 +245,17 @@ export async function deliver(notificationIds: string[]): Promise<void> {
         if (ch.channel === "TELEGRAM" && classifyFailure("TELEGRAM", err) === "disconnect") await disconnectTelegramChat(ch.address, "send-failed").catch(() => {});
       }
     }
-    await deliverPush(n, msg, t, project.id, taskId, update, errors);
-    if (errors.length) {
-      update.deliveryError = errors.join(" | ").slice(0, 500);
-      console.error("[notify]", n.id, maskEmailsIn(update.deliveryError));
-    }
-    if (Object.keys(update).length) await db.notification.update({ where: { id: n.id }, data: update });
+    finishing.push(
+      pushing.then(async () => {
+        if (errors.length) {
+          update.deliveryError = errors.join(" | ").slice(0, 500);
+          console.error("[notify]", n.id, maskEmailsIn(update.deliveryError));
+        }
+        if (Object.keys(update).length) await db.notification.update({ where: { id: n.id }, data: update });
+      }).catch((err) => console.error("[notify] envío", err)),
+    );
   }
+  await Promise.all(finishing);
 }
 
 /**
@@ -300,6 +310,7 @@ async function deliverNoteMention(
   const details = { notificationId: n.id, documentId: n.document.id, to: maskEmail(n.user.email) };
   const update: { emailSentAt?: Date; pushSentAt?: Date; deliveryError?: string } = {};
   const errors: string[] = [];
+  const pushing = deliverPush({ id: n.id, type: n.type, user: n.user }, msg, t, project.id, null, update, errors);
   if (emailEnabled() && noteMentionEmailMode(n.user) === "NOW") {
     const t0 = performance.now();
     try {
@@ -312,7 +323,9 @@ async function deliverNoteMention(
       logEvent({ ...base, level: "error", action: "notify.emailFailed", label: { k: "Fallo al enviar email a {name}: {error}", p: { name: n.user.name, error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details });
     }
   }
-  await deliverPush({ id: n.id, type: n.type, user: n.user }, msg, t, project.id, null, update, errors);
+  await pushing.catch((err) => {
+    errors.push(`push: ${(err as Error).message}`);
+  });
   if (errors.length) {
     update.deliveryError = errors.join(" | ").slice(0, 500);
     console.error("[notify]", n.id, maskEmailsIn(update.deliveryError));

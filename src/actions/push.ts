@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { isRowId } from "@/lib/row-id";
-import { requireUser } from "@/lib/session";
+import { currentSessionId, requireUser } from "@/lib/session";
 import { deviceLabel } from "@/lib/user-agent";
 import { endpointHash, pushIcon, PushSubscribeError, pushView, savePushSubscription, sendPushToUser } from "@/lib/web-push";
 import { PUSH_DEVICES_MAX } from "@/lib/web-push-core";
@@ -36,7 +36,10 @@ export async function subscribePush(input: { endpoint: string; keys: { p256dh: s
     const t = await getT();
     const ua = (await headers()).get("user-agent") ?? "";
     try {
-      const r = await savePushSubscription(user.id, { endpoint: input?.endpoint, keys: input?.keys }, ua);
+      // Atada a esta sesión: cerrarla (aquí o desde otro dispositivo) corta los avisos de este navegador.
+      const sessionId = await currentSessionId();
+      if (!sessionId) throw new AppError("Vuelve a iniciar sesión.", 401);
+      const r = await savePushSubscription(user.id, sessionId, { endpoint: input?.endpoint, keys: input?.keys }, ua);
       describeAction(r.created ? "Activó los avisos push en {device}" : "Renovó los avisos push en {device}", { device: deviceLabel(ua, t) });
       return { id: r.id };
     } catch (err) {
