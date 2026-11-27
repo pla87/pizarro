@@ -236,37 +236,36 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 71:** v1.74.0 fusionada en `main`. **La Release está pendiente de lanzar por el propietario**
-(*Actions → Release* sobre `main`; con la v1.74.0 basta, lleva también la v1.73.0 y la v1.73.1). Hasta entonces `stable` y la
-etiqueta `v1.72.0` siguen en la versión anterior. La ronda aplicó las respuestas a las preguntas 1-27 de la v1.73.1 (ver
-`HISTORIA.md`, ronda 71): quien crea o importa un proyecto es miembro, Releases solo donde se usan, columna nueva antes de
-«Hecho», «Organizar por personas» en la bienvenida, avisos de lo borrado, `/setup` y «Importar tareas» que no pierden nada,
-web de fuera con tope de bytes, fecha mínima y miniatura que abre la imagen, release .md sin imágenes repetidas, prueba de
-restauración sin disco, textos en inglés, CI más rápida y código retirado. Migración nueva:
-`20261205100000_aviso_enlace_revocado` (solo añade el valor `SHARE_REVOKED`). Guardas nuevas: `GUARDAS.md` («(Ronda 71)»).
-Pendientes de Claude in Chrome: `docs/PRUEBAS-CHROME.md`.
+**Estado al cerrar la ronda 72:** v1.75.0 fusionada en `main`; la v1.74.0 ya está publicada (`stable`). **La Release de la
+v1.75.0 está pendiente** (*Actions → Release* sobre `main`; el propietario autorizó lanzarla desde la sesión en la ronda
+72 para la v1.74.0, no como norma). Hecho: aviso al revocar un enlace de «Compartir fuera», `DROP COLUMN generatedByName`
+(`20261206100000`), imágenes de la web de fuera que se abren, «Varias tareas» encima del fondo, historial desde el número
+de versión, «Casa y familia» sin «Persona 1/2» y 3 vueltas de revisión y caza de bugs (ver `HISTORIA.md`, ronda 72).
+Guardas nuevas: `GUARDAS.md` («(Ronda 72)»). Pendientes de Claude in Chrome: `docs/PRUEBAS-CHROME.md`.
 
-**Siguiente sesión:** lo que el propietario decida. La v1.75 tiene dos pasos ya decididos (pregunta 5): escribir el aviso
-`SHARE_REVOKED` al revocar y el `DROP COLUMN` de `ColumnShare.generatedByName`. Arranque local como en
-`docs/handoff/LOCAL.md`, desde `origin/main`, con `npx prisma migrate deploy`.
+**Siguiente sesión:** lo que el propietario decida (preguntas de abajo; en especial la 1, notas generales). Rondas
+propias ya aprobadas: una URL por tarea y el migrador sin Prisma. Arranque local como en `docs/handoff/LOCAL.md`, desde
+`origin/main`, con `npx prisma migrate deploy`.
 
-**Preguntas abiertas al propietario (tras la v1.74.0)**, con la recomendación entre paréntesis. Se renumeran:
+**Preguntas abiertas al propietario (tras la v1.75.0)**, con la recomendación entre paréntesis:
 
-1. «Compartir fuera», opcionales (el propietario pidió las opciones y no ha elegido; no se hace ninguna): a) mostrar solo
-   las tareas que siguen en la columna o están terminadas (NO: se actualiza con el botón); b) tope de MB en las descargas
-   (ya hay 2 GB por enlace y hora: NO); c) 30 días de «caducado» también para el penúltimo enlace (NO); d) no publicar los
-   comentarios internos (NO: el aviso del pie lo dice); e) tope diario de cambios por enlace (NO por ahora); f) Ctrl+Z al
-   elegir o quitar la función (NO: necesita una operación nueva de deshacer en dos versiones).
-2. Quitar las etiquetas de ejemplo «Persona 1/2» de «Casa y familia» (SÍ, ronda propia: cambia la huella de la plantilla).
-3. Probar en real el texto para la IA de la guía de Railway (cuesta un proyecto de Railway más).
-4. Pendiente aprobado, en rondas propias: una URL por tarea (`?tarea=ID`) y el migrador propio sin Prisma (~18 % de la imagen).
-5. v1.75: escribir el aviso `SHARE_REVOKED` a quien generó la web cuando otra persona revoca el enlace, y borrar la columna
-   `generatedByName` (SÍ, ya decidido; no puede ir antes porque la v1.73 aún la usa).
-6. Web de fuera: que pulsar una imagen de la descripción también la abra (hoy la descarga), contando igual que la miniatura (SÍ).
-7. Web de fuera: «Copia tu texto antes de volver a intentarlo» también cuando el enlace se revoca o caduca mientras se
-   escribe (hoy esa página no pinta avisos; NO por ahora: es raro).
-8. Tarjeta de bienvenida en la vista de lista: el enlace «Organizar por personas» solo sale en la vista de tablero (NO: en
-   la lista no hay columnas que crear a la vista).
+1. R69F1, notas generales del proyecto. Propuesta: A) **«Nueva nota» dentro de Documentación** (RECOMENDADA): una nota es
+   un documento de texto que se escribe y edita en la app con el mismo editor que las descripciones (formato, imágenes,
+   menciones), con autoguardado y aviso si otra persona la cambió a la vez; sale en la lista de Documentación con las demás,
+   se puede fijar arriba («Notas generales»), buscar, mandar a la papelera, exportar y entra en las copias. Aprovecha
+   permisos, papelera, cuota y búsqueda que ya existen; coste medio (una ronda). B) Entrada **«Notas»** propia en el menú,
+   separada de los archivos: más visible, pero otra pantalla más y duplica papelera y búsqueda. C) **Una sola nota fija**
+   por proyecto («Notas generales») encima del tablero o en Ajustes, como la descripción del proyecto pero larga: lo más
+   barato, pero no admite varias notas ni se busca.
+2. Probar en real el texto para la IA de la guía de Railway (crea un proyecto de pago en Railway: con el propietario delante).
+3. «Importar tareas» con texto que no se puede leer: preguntar «¿Descartar el texto?» en vez de «Hay tareas sin importar»
+   (SÍ, un texto nuevo).
+4. Pasar a privado un proyecto de equipo: quien lo creó ahora es miembro y conserva el acceso; decirlo en el diálogo
+   («Mantienen el acceso: …») (SÍ).
+5. PDF del plan por persona: leer las subtareas con tope en SQL (como los comentarios) en vez de todas (SÍ, baja).
+6. Aviso de enlace revocado: crearlo después de responder (`after`) para que «Revocar» conteste unos milisegundos antes
+   (NO por ahora: el aviso llegaría un instante después).
+7. Web de fuera: una imagen dentro de un enlace interno o subrayado no se abre al pulsarla (NO: es raro).
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.
