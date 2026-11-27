@@ -1,5 +1,7 @@
 // Notas de Documentación (v1.76, «Nueva nota»): (crear) «Nueva nota» abre una «Nota sin título» en modo edición, lo
-// escrito se guarda solo al dejar de escribir («Guardado») y el título se cambia con el lápiz; (recargar) tras recargar
+// escrito se guarda solo al dejar de escribir («Guardado»), la nota toma como título su primera línea (v1.77) en el visor
+// y en la lista sin recargar, y el título se cambia con el lápiz (y entonces ya no cambia solo); (mencion) mencionar con
+// @ a la segunda persona le deja el aviso en la campana («… te ha mencionado en la nota «…»»), que abre la nota; (recargar) tras recargar
 // la página la nota sigue con su texto (Markdown pintado) y lo escrito justo antes de cerrar el visor también llega;
 // (fijar) «Fijar en «Notas generales»» del menú ⋯ la sube a la sección «Notas generales» y el botón del visor la quita;
 // (buscar) el buscador encuentra la nota por una palabra de su texto sin tildes ni mayúsculas, y no por otra; (conflicto)
@@ -7,16 +9,17 @@
 // la suya sin perder nada; (visual) con el editor con barra (modo visual) también se guarda; (papelera) enviarla a la
 // papelera desde el menú ⋯ la quita de la lista, en la papelera se ve su texto y se restaura. Misma base y servidor que
 // tablero-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-notas-e2e.mjs      # PART=recargar,fijar,buscar,conflicto,visual,papelera (crear va siempre)
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-notas-e2e.mjs      # PART=mencion,recargar,fijar,buscar,conflicto,visual,papelera (crear va siempre)
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
-const only = (process.env.PART || "recargar,fijar,buscar,conflicto,visual,papelera").split(",");
+const only = (process.env.PART || "mencion,recargar,fijar,buscar,conflicto,visual,papelera").split(",");
 
 await L.prepareUsers();
 await L.cleanBoard();
 const p = await L.project();
 const [admin] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
+const [second] = await L.q(`SELECT id, name FROM "User" WHERE email=$1`, [L.USER2]);
 await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
 await L.q(`UPDATE "User" SET locale='ES', "editorMode"='MARKDOWN' WHERE id=$1`, [admin.id]);
 
@@ -59,17 +62,58 @@ let noteId = null;
   await box.pressSequentially("# Acta semanal\n\nRepasamos la **Canción** del equipo.", { delay: 5 });
   await L.waitFor(async () => /^Guardado$/.test((await status(page).textContent()) ?? ""), { timeout: 10000 });
   L.eq("CREAR: el indicador dice «Guardado»", (await status(page).textContent())?.trim(), "Guardado");
-  const row = await noteRow("Nota sin título");
+  // Título automático (v1.77): la «Nota sin título» se llama como su primera línea, sin las marcas de Markdown.
+  const row = await noteRow("Acta semanal");
   noteId = row?.id ?? null;
   L.eq("CREAR: el texto está en la base (sin fichero) y la versión subió", [row?.noteContent, row?.noteVersion > 0], ["# Acta semanal\n\nRepasamos la **Canción** del equipo.", true]);
-  // Título: el lápiz del visor, como cualquier documento.
+  await L.checkEventually("CREAR: el título del visor pasa a ser la primera línea, sin recargar", async () => (await viewer.getByText("Acta semanal", { exact: true }).count()) > 0 && (await viewer.getByText("Nota sin título").count()) === 0);
+  await L.checkEventually("CREAR: y la lista de detrás también", async () => (await page.locator(`[data-doc-open="${noteId}"]`).textContent())?.includes("Acta semanal"));
+  // Título a mano: el lápiz del visor, como cualquier documento. Desde entonces no cambia solo.
   await viewer.getByRole("button", { name: "Renombrar" }).click();
-  await viewer.getByLabel("Nombre del documento").fill("Acta semanal");
+  await viewer.getByLabel("Nombre del documento").fill("Acta semanal (revisada)");
   await viewer.getByRole("button", { name: "Guardar", exact: true }).click();
-  await L.eqEventually("CREAR: el título se guarda como nombre del documento", async () => (await noteById(noteId))?.name, "Acta semanal");
+  await L.eqEventually("CREAR: el título se guarda como nombre del documento", async () => (await noteById(noteId))?.name, "Acta semanal (revisada)");
+  await box.press("Control+Home");
+  await box.press("End");
+  await box.pressSequentially(" del lunes", { delay: 5 });
+  await L.waitFor(async () => (await noteById(noteId))?.noteContent?.startsWith("# Acta semanal del lunes"), { timeout: 10000 });
+  L.eq("CREAR: renombrada a mano, cambiar la primera línea ya no le cambia el nombre", (await noteById(noteId))?.name, "Acta semanal (revisada)");
   await closeViewer(page);
-  await L.checkEventually("CREAR: la nota sale en la lista, con el icono de nota", async () => (await page.locator(`[data-doc-open="${noteId}"]`).textContent())?.includes("Acta semanal") && (await page.locator(`[data-doc-open="${noteId}"] [title="Nota"]`).count()) === 1);
+  await L.checkEventually("CREAR: la nota sale en la lista, con el icono de nota", async () => (await page.locator(`[data-doc-open="${noteId}"]`).textContent())?.includes("Acta semanal (revisada)") && (await page.locator(`[data-doc-open="${noteId}"] [title="Nota"]`).count()) === 1);
   L.assertNoErrors("CREAR", [s]);
+}
+
+// --- Mención: la segunda persona recibe el aviso en la campana y abre la nota ---------------------------------------------
+if (only.includes("mencion") && noteId) {
+  L.scenario("mencion: mencionar con @ en la nota avisa a la segunda persona en la campana");
+  await L.q(`DELETE FROM "Notification" WHERE "userId"=$1`, [second.id]);
+  await openById(page, noteId);
+  await U.dialog(page).getByTestId("note-edit").click();
+  const box = editorBox(page);
+  await box.waitFor();
+  await box.press("Control+End");
+  await box.pressSequentially("\n\nPara @Segu", { delay: 5 });
+  await page.keyboard.press("Enter");
+  await box.pressSequentially("revisa los acuerdos.", { delay: 5 });
+  await L.waitFor(async () => (await status(page).textContent())?.trim() === "Guardado", { timeout: 10000 });
+  L.check("MENCION: la mención queda en el texto", (await noteById(noteId))?.noteContent?.includes(`@[${second.name}](user:${second.id})`));
+  await L.eqEventually("MENCION: un aviso para la segunda persona, de la nota", async () => (await L.q(`SELECT count(*)::int n FROM "Notification" WHERE "userId"=$1 AND type='MENTION' AND "documentId"=$2`, [second.id, noteId]))[0].n, 1);
+  // Más texto después (otro guardado automático): no repite el aviso.
+  await box.pressSequentially(" Gracias.", { delay: 5 });
+  await L.waitFor(async () => (await noteById(noteId))?.noteContent?.endsWith("Gracias."), { timeout: 10000 });
+  L.eq("MENCION: seguir escribiendo no repite el aviso", (await L.q(`SELECT count(*)::int n FROM "Notification" WHERE "userId"=$1 AND "documentId"=$2`, [second.id, noteId]))[0].n, 1);
+  await closeViewer(page);
+  const s2 = await L.session({ email: L.USER2 });
+  await L.goto(s2.page, `${L.BASE}/notifications`);
+  const notice = s2.page.locator("[data-notice-open]").filter({ hasText: "te ha mencionado en la nota «Acta semanal (revisada)»" });
+  await notice.first().waitFor({ timeout: 10000 });
+  L.check("MENCION: la campana lo dice con el nombre de la nota y el texto de la mención", (await notice.first().textContent())?.includes("revisa los acuerdos."));
+  await notice.first().click();
+  await s2.page.waitForURL((u) => u.pathname.endsWith("/docs") && u.searchParams.get("doc") === noteId, { timeout: 10000 });
+  await U.dialog(s2.page).locator("[data-testid=note-editor]").waitFor({ timeout: 10000 });
+  L.check("MENCION: al pulsarlo se abre la nota en Documentación", true);
+  L.assertNoErrors("MENCION", [s, s2]);
+  await s2.ctx.close();
 }
 
 // --- Recargar: el texto sigue, y lo escrito justo antes de cerrar llega ----------------------------------------------------

@@ -11,6 +11,7 @@ import { classifyHtmlLink, htmlLinkTarget } from "../src/lib/html-doc-links";
 import { cleanOrphanFiles, parseUploadName } from "../src/lib/orphan-files";
 import { documentPath } from "../src/lib/uploads";
 import { documentFailuresMessage } from "../src/components/docs/uploadDocuments";
+import { isDefaultNoteName, NOTE_TITLE_MAX, noteAutoTitle } from "../src/lib/note-title";
 
 test("detectDocumentKind: por extensión, sin distinguir mayúsculas", () => {
   assert.equal(detectDocumentKind("notas.txt", "text/plain"), "TEXT");
@@ -301,4 +302,22 @@ test("classifyHtmlLink: el propio documento por su nombre y nombres arreglados a
   assert.deepEqual(classifyHtmlLink("lección.html".normalize("NFD"), docs), { type: "document", id: "d4", hash: "" });
   assert.deepEqual(classifyHtmlLink(encodeURIComponent("lección.html".normalize("NFD")), docs), { type: "document", id: "d4", hash: "" });
   assert.deepEqual(classifyHtmlLink("%20.html", docs), { type: "missing" });
+});
+
+// --- Título automático de las notas (v1.77) ---------------------------------------------------------------------------
+
+test("título automático: la primera línea con texto, sin marcas de Markdown y recortada", () => {
+  assert.equal(noteAutoTitle("# Acta semanal\n\nRepasamos la **Canción**."), "Acta semanal");
+  assert.equal(noteAutoTitle("\n\n   \n**Reunión** con _ventas_ y ~~nadie~~\notra"), "Reunión con ventas y nadie");
+  assert.equal(noteAutoTitle("- [ ] Llamar a @[Ana](user:abc123)"), "Llamar a @Ana");
+  assert.equal(noteAutoTitle("1. Primer punto"), "Primer punto");
+  assert.equal(noteAutoTitle("> Cita de [la web](https://example.com)"), "Cita de la web");
+  assert.equal(noteAutoTitle("[Uno](https://a.example)[Dos](https://b.example)"), "UnoDos");
+  assert.equal(noteAutoTitle("---\n\n![](/api/documents/x)\n\nTexto real"), "Texto real");
+  assert.equal(noteAutoTitle("Informe 1/2: <b>bien</b>"), "Informe 1_2_ bien");
+  assert.equal(noteAutoTitle(""), "");
+  assert.equal(noteAutoTitle("   \n\n---\n"), "");
+  const long = noteAutoTitle("palabra ".repeat(40));
+  assert.ok([...long].length <= NOTE_TITLE_MAX && long.endsWith("…"), long);
+  assert.ok(isDefaultNoteName("Nota sin título") && isDefaultNoteName("Untitled note") && !isDefaultNoteName("Acta"));
 });

@@ -7,12 +7,13 @@ import type { CurrentUser } from "./session";
 import { UNREAD_COUNT_CAP } from "./unread-core";
 
 /**
- * Avisos que la persona puede ver: los de tareas de proyectos a los que sigue teniendo acceso y los de proyecto
- * (PROJECT_TO_TEAM, sin tarea) de esos mismos proyectos. Para la campana, su contador y la insignia de la app.
+ * Avisos que la persona puede ver: los de tareas de proyectos a los que sigue teniendo acceso, los de proyecto
+ * (PROJECT_TO_TEAM, sin tarea) de esos mismos proyectos y las menciones en notas de Documentación de esos proyectos
+ * (también si la nota está en la papelera: al abrirlo, Documentación lo dice). Para la campana, su contador y la insignia.
  */
 export function visibleNotificationsWhere(user: CurrentUser): Prisma.NotificationWhereInput {
   const projects = visibleProjectsWhere(user);
-  return { userId: user.id, OR: [{ task: { project: projects } }, { taskId: null, project: projects }] };
+  return { userId: user.id, OR: [{ task: { project: projects } }, { taskId: null, project: projects }, { taskId: null, document: { project: projects } }] };
 }
 
 /**

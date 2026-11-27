@@ -3,26 +3,30 @@ import type { T } from "../i18n/core";
 import { escapeHtml, noReplyNote, unsubscribeFooter } from "./mail";
 import { mentionsToPlain } from "./mentions";
 
-type DigestSectionKey = "assigned" | "overdue" | "dueToday" | "created" | "done" | "comments";
+type DigestSectionKey = "assigned" | "notes" | "overdue" | "dueToday" | "created" | "done" | "comments";
 
 /** Orden en el que salen las secciones: primero lo que te toca a ti. */
-const DIGEST_ORDER: DigestSectionKey[] = ["assigned", "overdue", "dueToday", "created", "done", "comments"];
+const DIGEST_ORDER: DigestSectionKey[] = ["assigned", "notes", "overdue", "dueToday", "created", "done", "comments"];
 
 /** Máximo de tareas por sección en el correo (el resto se resume en «y N más»). */
 export const DIGEST_MAX_ITEMS = 25;
 
 export interface DigestItem {
+  /** La tarea; en la sección «notes», vacío (el elemento es la nota de `docId`). */
   taskId: string;
+  /** Nota de Documentación en la que te han mencionado (sección «notes», v1.77): `title` es su nombre. */
+  docId?: string;
   title: string;
   projectId: string;
   projectName: string;
-  /** Comentarios nuevos de la tarea (sección «comments»). */
+  /** Comentarios nuevos de la tarea (sección «comments») o menciones en la nota (sección «notes»). */
   count?: number;
   /** Otras tareas del mismo aviso que no salen en la lista (el lote de «Asignación a persona»: «y N más»). */
   more?: number;
 }
 
-export type DigestInput = Record<DigestSectionKey, DigestItem[]>;
+/** Lo reunido para el resumen, por sección («notes» puede faltar: solo la rellena quien las quiere en el resumen). */
+export type DigestInput = Record<Exclude<DigestSectionKey, "notes">, DigestItem[]> & { notes?: DigestItem[] };
 
 interface DigestSection {
   key: DigestSectionKey;
@@ -35,8 +39,11 @@ interface DigestSection {
 }
 
 export function emptyDigestInput(): DigestInput {
-  return { assigned: [], overdue: [], dueToday: [], created: [], done: [], comments: [] };
+  return { assigned: [], notes: [], overdue: [], dueToday: [], created: [], done: [], comments: [] };
 }
+
+/** Lo que identifica un elemento del resumen: la tarea o, en «notes», la nota. */
+const itemKey = (i: DigestItem): string => (i.docId ? `doc:${i.docId}` : i.taskId);
 
 /**
  * Agrupa por sección y proyecto, sin repetir tareas dentro de una sección, y descarta las secciones vacías. `taskCount`:
@@ -49,11 +56,11 @@ export function buildDigest(input: DigestInput): { sections: DigestSection[]; em
   let more = 0;
   for (const key of DIGEST_ORDER) {
     const seen = new Set<string>();
-    const unique = input[key].filter((i) => !seen.has(i.taskId) && !!seen.add(i.taskId));
+    const unique = (input[key] ?? []).filter((i) => !seen.has(itemKey(i)) && !!seen.add(itemKey(i)));
     if (!unique.length) continue;
     const extra = unique.reduce((n, i) => n + (i.more ?? 0), 0);
     more += extra;
-    for (const i of unique) all.add(i.taskId);
+    for (const i of unique) all.add(itemKey(i));
     const shown = unique.slice(0, DIGEST_MAX_ITEMS);
     const byProject = new Map<string, DigestSection["projects"][number]>();
     for (const item of shown) {
@@ -74,6 +81,7 @@ export function buildDigest(input: DigestInput): { sections: DigestSection[]; em
 function heading(key: DigestSectionKey, t: T): string {
   switch (key) {
     case "assigned": return t("Asignadas a ti");
+    case "notes": return t("Te han mencionado en notas");
     case "overdue": return t("Tus tareas vencidas");
     case "dueToday": return t("Tus tareas que vencen hoy");
     case "created": return t("Tareas nuevas");
@@ -85,6 +93,7 @@ function heading(key: DigestSectionKey, t: T): string {
 function itemText(i: DigestItem, t: T): string {
   const title = t("«{title}»", { title: mentionsToPlain(i.title) });
   if (i.more) return `${title} ${t("y {n} más", { n: i.more })}`;
+  if (i.docId) return i.count && i.count > 1 ? `${title} (${t("{n} menciones", { n: i.count })})` : title;
   return i.count && i.count > 1 ? `${title} (${t("{n} comentarios", { n: i.count })})` : title;
 }
 
@@ -102,7 +111,7 @@ export function digestPeriod(lastSentAt: Date | null, now: Date): DigestPeriod {
 /** Correo del resumen: asunto, texto plano y HTML (el contenido de los usuarios va escapado). */
 export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name: string; baseUrl: string; period?: DigestPeriod; unsubscribeUrl?: string }, t: T) {
   const { baseUrl } = opts;
-  const link = (i: DigestItem) => `${baseUrl}/p/${i.projectId}?task=${i.taskId}`;
+  const link = (i: DigestItem) => (i.docId ? `${baseUrl}/p/${i.projectId}/docs?doc=${i.docId}` : `${baseUrl}/p/${i.projectId}?task=${i.taskId}`);
   // Tareas distintas: antes se sumaban las secciones y una tarea asignada y vencida contaba dos veces.
   const subject = t("Tu resumen diario de Pizarro ({n})", { n: digest.taskCount });
   const period = opts.period ?? "24h";

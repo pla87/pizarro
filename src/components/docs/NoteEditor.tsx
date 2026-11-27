@@ -47,8 +47,8 @@ interface Props {
   fileMaxMb: number;
   /** Abrir ya en modo edición (una nota recién creada). */
   startEditing?: boolean;
-  /** Se guardó: el tamaño nuevo (bytes del texto). */
-  onSaved?: (size: number) => void;
+  /** Se guardó: el tamaño nuevo (bytes del texto) y, si el guardado le cambió el nombre (título automático), el nuevo. */
+  onSaved?: (size: number, name?: string) => void;
   /** Se subió una imagen pegada como documento (la lista debe refrescarse). */
   onUploaded?: () => void;
   /** La nota resultó estar en la papelera (la mandó otra persona): la lista debe refrescarse. */
@@ -182,7 +182,7 @@ export function NoteEditor({ docId, projectId, currentUserId, editorMode, users,
     }
     baseRef.current = out.version;
     savedRef.current = sending;
-    callbacks.current.onSaved?.(out.size);
+    callbacks.current.onSaved?.(out.size, out.name);
     if (textRef.current === sending) {
       clearDraft(key);
       if (alive.current) {

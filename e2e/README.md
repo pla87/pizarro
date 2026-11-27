@@ -60,7 +60,7 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | [**Documentación y formatos del material**](SUITES.md#documentación-y-formatos-del-material) | | **197** | |
 | Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/documentacion-formatos-e2e.mjs` | 107 | ~1 min |
 | Enlaces dentro de los HTML de Documentación: entre documentos (ida, vuelta, #apartado, inexistente, otro proyecto), al propio documento y con nombres arreglados, e índice (#apartado, también en SVG, sin `ping`); HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16, UTF-8 con un `<meta>` de 8 bits mal puesto y binarios con BOM de UTF-16 (ronda 52, cazas de bugs 50b y 52) | `e2e/documentacion-enlaces-e2e.mjs` | 90 | ~1,5 min |
-| Notas de Documentación (v1.76): «Nueva nota», guardado automático (también al cerrar), título, «Notas generales», buscar en el texto, cambio simultáneo en dos pestañas, editor con barra y papelera | `e2e/documentacion-notas-e2e.mjs` | 37 | ~1 min |
+| Notas de Documentación (v1.76): «Nueva nota», guardado automático (también al cerrar), título (y título automático, v1.77), aviso de mención en la campana, «Notas generales», buscar en el texto, cambio simultáneo en dos pestañas, editor con barra y papelera | `e2e/documentacion-notas-e2e.mjs` | 45 | ~1 min |
 | [**Cuentas**](SUITES.md#cuentas) | | **199** | |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51), y baja con Google en un servidor sin email (caza de bugs 50b) | `e2e/cuentas-borrar-restos-e2e.mjs` | 100 | ~1 min |

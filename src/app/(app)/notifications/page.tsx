@@ -38,6 +38,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       actor: { select: { id: true, name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true } } } },
       project: { select: { id: true, name: true } },
+      document: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
     },
   }),
   // Recuento real de los sin leer, no solo de los cargados (con 150 decía «100 sin leer»).
@@ -64,6 +65,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         actor: n.actor,
         task: n.task ? { id: n.task.id, title: mentionsToPlain(n.task.title), projectId: n.task.project.id, projectName: n.task.project.name } : null,
         project: !n.task && n.project ? { id: n.project.id, name: n.project.name } : null,
+        doc: !n.task && n.document ? { id: n.document.id, name: n.document.name, projectId: n.document.project.id, projectName: n.document.project.name } : null,
       }))}
     />
   );
