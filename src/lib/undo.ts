@@ -91,8 +91,9 @@ interface TaskSnapshot {
 export type UndoOp =
   /**
    * `relink`: devuelve el bloqueo (`data.blockedById`) o el origen de una repetida (`data.recurrenceFromId`) que perdió la
-   * tarea al borrarse la otra (SetNull),
-   * solo si sigue sin bloqueo: si entretanto alguien le puso otro, no se pisa (ver dependentLinkOps).
+   * tarea al borrarse la otra (SetNull), solo si sigue vacío: si entretanto alguien le puso otro, no se pisa; el origen,
+   * además, solo si la tarea que vuelve no tiene ya otra siguiente (ver dependentLinkOps); ese no cuenta como conflicto ni
+   * entra en la huella.
    */
   | { t: "task.set"; id: string; data: TaskData; labelIds?: string[]; relink?: true }
   | { t: "task.remove"; id: string }
@@ -218,9 +219,10 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
 }
 
 /**
- * Tareas que dependen de alguna de `ids` (blockedById) sin estar entre ellas: al borrar esas, la base de datos les quita
- * el bloqueo (SetNull). Devuelve las operaciones que se lo vuelven a poner cuando vuelvan (`relink`). Van ANTES de las
- * que recrean las tareas borradas (se aplican en orden inverso). Una sola consulta.
+ * Tareas que dependen de alguna de `ids` (blockedById) o que son su siguiente aparición (recurrenceFromId) sin estar
+ * entre ellas: al borrar esas, la base de datos les quita el enlace (SetNull). Devuelve las operaciones que se lo vuelven
+ * a poner cuando vuelvan (`relink`). Van ANTES de las que recrean las tareas borradas (se aplican en orden inverso). Una
+ * sola consulta.
  */
 export async function dependentLinkOps(ids: string[]): Promise<Extract<UndoOp, { t: "task.set" }>[]> {
   if (!ids.length) return [];
@@ -857,7 +859,8 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
       switch (op.t) {
         case "task.set": {
           const exists = await db.task.count({ where: { id: op.id, projectId } });
-          if (!exists) { miss++; break; }
+          // Un enlace que devolver a una tarea que ya no está no es una parte perdida: no había nada que deshacer en ella.
+          if (!exists) { if (!op.relink) miss++; break; }
           if (op.relink) {
             // La siguiente aparición vuelve a colgar de la tarea que vuelve: solo si sigue sin origen y ninguna otra es ya
             // la siguiente de esa tarea (recurrenceFromId es único).
@@ -1087,15 +1090,21 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         }
         case "column.restore": {
           if (await db.column.count({ where: { id: op.row.id } })) { miss++; break; }
-          // Como al crear columnas: como mucho 30 por proyecto.
-          if ((await db.column.count({ where: { projectId } })) >= 30) { miss++; break; }
           // El destino de rutinas puede haberse borrado entre tanto: entonces la columna vuelve sin él.
           const routineTargetColumnId = op.row.routineTargetColumnId && (await db.column.count({ where: { id: op.row.routineTargetColumnId, projectId } })) ? op.row.routineTargetColumnId : null;
-          // Un rol único (siguiente salto, en producción) que entretanto se dio a otra columna se queda en esa: la que
-          // vuelve lo hace «Sin rol» (si no, el índice único hacía fallar la restauración y la columna no volvía).
-          let role = liveColumnRole(op.row.role as ColumnRoleValue);
-          if (isUniqueColumnRole(role) && (await db.column.count({ where: { projectId, role } }))) role = "NONE";
-          await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role, assigneeId: known(op.row.assigneeId), defaultKindId: await existingKind(op.row.defaultKindId) } });
+          const defaultKindId = await existingKind(op.row.defaultKindId);
+          // Con el candado de columnas del proyecto, como al crearlas: como mucho 30, y un rol único (siguiente salto, en
+          // producción) que entretanto se dio a otra columna se queda en esa (la que vuelve lo hace «Sin rol»; si no, el
+          // índice único hacía fallar la restauración y la columna no volvía).
+          const created = await db.$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(projectId)}))`;
+            if ((await tx.column.count({ where: { projectId } })) >= 30) return false;
+            let role = liveColumnRole(op.row.role as ColumnRoleValue);
+            if (isUniqueColumnRole(role) && (await tx.column.count({ where: { projectId, role } }))) role = "NONE";
+            await tx.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role, assigneeId: known(op.row.assigneeId), defaultKindId } });
+            return true;
+          });
+          if (!created) { miss++; break; }
           if (op.row.role === "BUDGET") await ensureCostField(projectId);
           columnIds.add(op.row.id);
           placedColumns.push(op.row.id);
@@ -1357,7 +1366,10 @@ function fingerprintSubjects(ops: UndoOp[]) {
   const lookups: { model: FpModel; id: string }[] = [];
   for (const op of ops) {
     switch (op.t) {
-      case "task.set": case "task.remove": taskIds.add(op.id); break;
+      // El origen que vuelve a una siguiente aparición no pisa nada (solo escribe si sigue vacío): esa tarea no entra en la
+      // huella (es la viva de la serie y se toca a menudo). El bloqueo que vuelve sí, para avisar si ya no vuelve.
+      case "task.set": if (!(op.relink && op.data.recurrenceFromId)) taskIds.add(op.id); break;
+      case "task.remove": taskIds.add(op.id); break;
       case "task.restore": taskIds.add(op.snap.task.id); break;
       case "subtask.restore": taskIds.add(op.row.taskId); break;
       case "comment.restore": case "attachment.restore": case "link.restore": taskIds.add(op.row.taskId); break;

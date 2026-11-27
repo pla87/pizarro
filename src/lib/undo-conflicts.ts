@@ -39,7 +39,9 @@ export async function findUndoConflicts(
   const subtaskTasks = new Set<string>();
   const subtaskIds: string[] = [];
   for (const op of ops) {
-    if (op.t === "task.set") fieldTasks.add(op.id);
+    // Devolver el origen a la siguiente aparición de una repetida (`relink` de recurrenceFromId) solo escribe si sigue vacío
+    // y esa tarea es la viva de la serie (se toca a menudo): no se pregunta por ella. El bloqueo sí (se avisa si no vuelve).
+    if (op.t === "task.set") { if (!(op.relink && op.data.recurrenceFromId)) fieldTasks.add(op.id); }
     else if (op.t === "task.remove") removedTasks.add(op.id);
     else if (op.t === "subtask.set" || op.t === "subtask.remove") subtaskIds.push(op.id);
     else if (op.t === "subtask.restore") subtaskTasks.add(op.row.taskId);

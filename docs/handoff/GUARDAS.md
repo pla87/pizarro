@@ -475,7 +475,12 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
   el formato, prefijo nuevo y el mismo trato para el anterior. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
-  dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
+  dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`). (Ronda 73) También guarda la siguiente
+  aparición de una repetida (`recurrenceFromId`, SetNull): vuelve a colgar de la tarea que vuelve solo si sigue sin origen
+  y esa tarea no tiene ya otra siguiente (es único); sin eso, archivarla o volver a terminarla duplicaba la serie. Ese
+  `relink` no cuenta como conflicto ni entra en la huella (la siguiente aparición se toca a menudo); el del bloqueo sí.
+  Un `relink` sobre una tarea que ya no existe no cuenta como parte perdida. `column.restore` comprueba el tope de 30
+  columnas y el rol único bajo el candado de columnas (`columnsLockName`): si otra columna tiene ya el rol, vuelve «Sin rol».
 - (Ronda 70) Conflictos de deshacer (`undo-conflicts.ts`): lo de fuera es `userId`/`authorId: null` (web de «Compartir
   fuera», siempre otra persona; el nombre sale de `userName`/`authorName`), así que el filtro es `OR: [{ campo: null }, {
   campo: { not: userId } }]`, nunca `not: null`. Prueba: `tests/db/undo-conflicts.test.ts`.

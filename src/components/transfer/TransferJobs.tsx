@@ -2,7 +2,7 @@
 
 import { Download } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { TRANSFER_QUEUED_EVENT, isFinal, type TransferJobView } from "./client";
@@ -57,6 +57,7 @@ function Row({ job }: { job: TransferJobView }) {
 export function TransferJobs({ kind, projectId, skipId = null, title }: { kind: "EXPORT" | "IMPORT"; projectId?: string; skipId?: string | null; title: string }) {
   const [jobs, setJobs] = useState<TransferJobView[] | null>(null);
   const [tick, setTick] = useState(0);
+  const failures = useRef(0);
   const query = `kind=${kind}${projectId ? `&projectId=${projectId}` : ""}`;
   const refresh = useCallback(() => setTick((n) => n + 1), []);
   useEffect(() => {
@@ -69,13 +70,19 @@ export function TransferJobs({ kind, projectId, skipId = null, title }: { kind: 
     fetch(`/api/transfer-jobs?${query}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((b: { jobs: TransferJobView[] }) => !cancelled && setJobs(b.jobs))
-      // Un fallo con alguna en curso: una lista nueva (la misma) vuelve a programar el sondeo de 3 s, que si no se paraba.
-      .catch(() => !cancelled && setJobs((prev) => (prev ? [...prev] : [])));
+      .then(() => { failures.current = 0; })
+      // Un fallo con alguna en curso: una lista nueva (la misma) vuelve a programar el sondeo, que si no se paraba; cada
+      // vez más despacio y, tras 10 fallos seguidos, se deja (vuelve con una nueva en cola o al reabrir el panel).
+      .catch(() => {
+        if (cancelled) return;
+        failures.current++;
+        setJobs((prev) => (prev && failures.current <= 10 ? [...prev] : prev ?? []));
+      });
     return () => { cancelled = true; };
   }, [query, tick]);
   useEffect(() => {
     if (!active) return;
-    const timer = setTimeout(refresh, 3000);
+    const timer = setTimeout(refresh, 3000 * Math.min(2 ** failures.current, 16));
     return () => clearTimeout(timer);
   }, [active, jobs, refresh]);
   const shown = (jobs ?? []).filter((j) => j.id !== skipId);

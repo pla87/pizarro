@@ -353,7 +353,7 @@ export function FormatToolbar({ items, onLeave, className, trailing }: { items: 
                 )}
               >
                 {createElement(b.icon, { size: 15, className: "shrink-0" })}
-                <span className="truncate">{t(b.title)}</span>
+                <span className="truncate">{titleOf(b.title)}</span>
               </button>
             ))}
           </div>,
