@@ -37,7 +37,7 @@ describe("deshacer con cambios ajenos posteriores", () => {
     await db.taskEvent.create({ data: { taskId: task.id, projectId: f.project.id, userId: null, userName: "Cliente (fuera)", code: "title", label: "" } });
     const res = expectOk(await undoChecked(f.project.id));
     assert.ok(res.conflict, "debe pedir confirmación");
-    assert.match(res.conflict.message, /^Cliente (fuera) cambió esta tarea después/);
+    assert.ok(res.conflict.message.startsWith("Cliente (fuera) cambió esta tarea después"));
   });
 
   test("mis propios cambios posteriores no cuentan", async () => {
