@@ -100,8 +100,6 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
     hiddenGeneralKinds: [],
     hideAllGeneralKinds: true,
     labels: [
-      { name: "Person 1", color: "#0ea5e9" },
-      { name: "Person 2", color: "#ec4899" },
       { name: "Whole family", color: "#a855f7" },
       { name: "Urgent", color: "#ef4444" },
     ],

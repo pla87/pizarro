@@ -79,7 +79,8 @@ test("las seis de serie: claves y nombres; las unidas traen tipos con subtareas 
     const t = canonicalTemplate(key)!;
     assert.ok(t.kinds.filter((k) => k.subtaskTemplate.length > 0).length >= 4, `${key} con pocas subtareas`);
     assert.ok(t.kinds.every((k) => k.descriptionTemplate.length > 0), `${key} con tipo sin descripción`);
-    assert.ok(t.labels.length >= 3 && t.labels.length <= 5, key);
+    // «Casa y familia» se queda en 2 desde que no trae «Persona 1/2» (ronda 72).
+    assert.ok(t.labels.length >= 2 && t.labels.length <= 5, key);
     assert.ok(t.columns.length <= 7, `${key}: demasiadas columnas`);
     assert.equal(t.hideAllGeneralKinds, true);
   }

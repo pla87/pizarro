@@ -88,11 +88,19 @@ export function shareMarkdownHtml(markdown: string, opts: { token: string; attac
     const m = ATTACHMENT_SRC.exec(href.trim());
     return m && opts.attachments.has(m[1]!) ? m[1]! : null;
   };
+  // Dentro de un enlace, la imagen va sin el suyo propio (un <a> dentro de otro no es válido y el navegador lo parte).
+  let inLink = 0;
   marked.use({
     renderer: {
       html: ({ text }) => escapeHtml(text),
       link({ href, tokens }) {
-        const inner = this.parser.parseInline(tokens);
+        inLink++;
+        let inner: string;
+        try {
+          inner = this.parser.parseInline(tokens);
+        } finally {
+          inLink--;
+        }
         if (href === UNDERLINE_HREF) return `<u>${inner}</u>`;
         const id = own(href);
         if (id) return `<a href="${escapeHtml(shareAttachmentPath(opts.token, id))}">${inner}</a>`;
@@ -104,8 +112,9 @@ export function shareMarkdownHtml(markdown: string, opts: { token: string; attac
       image({ href, text }) {
         const id = own(href);
         if (!id) return escapeHtml(text);
-        const src = escapeHtml(shareAttachmentPath(opts.token, id, true));
-        return `<a href="${escapeHtml(shareAttachmentPath(opts.token, id))}"><img alt="${escapeHtml(text)}" src="${src}" loading="lazy"></a>`;
+        const img = `<img alt="${escapeHtml(text)}" src="${escapeHtml(shareAttachmentPath(opts.token, id, true))}" loading="lazy">`;
+        // Pulsarla la abre en otra pestaña (como la miniatura de un adjunto: `?inline=open`, cuenta como una vista).
+        return inLink ? img : `<a href="${escapeHtml(shareAttachmentPath(opts.token, id, "open"))}" target="_blank" rel="noopener noreferrer">${img}</a>`;
       },
     },
   });

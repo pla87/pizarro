@@ -73,7 +73,7 @@ export const common: Record<string, string> = {
   "Documento nuevo enlazado a la tarea": "New document linked to the task",
   "Cerrar": "Close",
   "Abrir otra tarea nueva al lado": "Open another new task alongside",
-  "Abrir «Varias tareas» al lado": "Open \"Several tasks\" alongside",
+  "Abrir «Varias tareas» al lado": "Open “Several tasks” alongside",
   "Cargando": "Loading",
   "Ocultar contraseña": "Hide password",
   "Mostrar contraseña": "Show password",
@@ -172,4 +172,6 @@ export const common: Record<string, string> = {
 
   // Copia flotante de «Nueva tarea» con dos tareas abiertas lado a lado (no abre una tercera)
   "Ya hay dos tareas abiertas": "Two tasks are already open",
+  // Ronda 72: el historial de versiones se abre desde la versión del pie del menú
+  "Historial de versiones (v{version})": "Version history (v{version})",
 };

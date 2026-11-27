@@ -386,17 +386,21 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   // cada uno llega al abrirlo. El editor con barra (TipTap, unos 170 KB gz) solo para quien lo usa: con el editor
   // Markdown no se abre nunca.
   const richEditor = data.editorMode === "WYSIWYG";
+  // El diálogo de la release solo se abre con una columna «Siguiente salto» («Generar release») o con releases hechas
+  // («Release con selección», ver usesReleases): si no, no se precarga (llega al abrirlo si se crea la columna).
+  const releasable = columns.some((c) => c.role === "NEXT_RELEASE") || Boolean(page.project.hasReleases);
   useEffect(() => {
     if (saveDataOn()) return;
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const id = idle(() => {
-      const loads: (() => Promise<unknown>)[] = [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, loadImportTasksDialog];
+      const loads: (() => Promise<unknown>)[] = [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadBulkTaskDialog, loadImportTasksDialog];
+      if (releasable) loads.push(loadReleaseDialog);
       if (richEditor) loads.push(() => import("@/components/ui/RichTextEditor"));
       for (const load of loads) load().catch(() => {});
     });
     return () => cancel(id);
-  }, [richEditor]);
+  }, [richEditor, releasable]);
 
   // Borradores locales: si la página se cerró con una tarea abierta o a medio crear, se reabre.
   useEffect(() => {
@@ -1719,6 +1723,9 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   }, [primaryOpen]);
   const newTaskBtnRef = useRef<HTMLButtonElement>(null);
   const newTaskRect = useFloatingRect(newTaskBtnRef, primaryOpen);
+  // Igual con «Varias tareas»: su copia abre «Varias tareas» al lado (como Alt+Shift+N con un diálogo abierto).
+  const bulkBtnRef = useRef<HTMLButtonElement>(null);
+  const bulkRect = useFloatingRect(bulkBtnRef, primaryOpen);
   const secondOpen = !!secondNew || secondBulk;
   const addSecondBulk = () => setSecondBulk(true);
   const addSecond = () => setSecondNew({ columnId: (sortedColumns.find((c) => c.name.trim().toLowerCase() === "backlog") ?? sortedColumns[0])?.id });
@@ -1959,7 +1966,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
               <Archive size={16} /> <span className={HEADER_LABEL}>{t("Archivadas")}</span>
             </button>
             <TransferButton onImport={() => setImporting({ text: "" })} />
-            <button className="btn-secondary" onClick={() => setBulk({})} aria-label={t("Varias tareas")} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
+            <button ref={bulkBtnRef} className="btn-secondary" onClick={() => setBulk({})} aria-label={t("Varias tareas")} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
               <PlusStack size={16} /> <span className={HEADER_LABEL}>{t("Varias tareas")}</span>
             </button>
           </div>
@@ -2018,6 +2025,25 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
                 {/* Mismo texto que el botón original, según el modo de la cabecera (useHeaderFit): «Nueva tarea», «Nueva» o
                     solo el icono. Antes se deducía del ancho, y «Nueva tarea» (unos 120 px) salía como «Nueva». */}
                 <Plus size={16} /> {headerFit === "tight" ? null : headerFit === "icons" ? t("Nueva") : t("Nueva tarea")}
+              </button>,
+              document.body,
+            )}
+          {/* Lo mismo con «Varias tareas»: en su sitio, encima del fondo, y abre «Varias tareas» al lado. */}
+          {primaryOpen && bulkRect &&
+            createPortal(
+              <button
+                type="button"
+                tabIndex={-1}
+                data-pz-layer
+                className={cn("btn-secondary fixed z-[70] whitespace-nowrap shadow-lg", secondOpen && "cursor-default")}
+                style={{ left: bulkRect.left, top: bulkRect.top, width: bulkRect.width, height: bulkRect.height }}
+                onClick={() => !secondOpen && addSecondBulk()}
+                aria-disabled={secondOpen}
+                aria-label={t("Abrir «Varias tareas» al lado")}
+                title={secondOpen ? t("Ya hay dos tareas abiertas") : t("Abrir «Varias tareas» al lado")}
+              >
+                {/* Texto solo con la cabecera en `full` (como HEADER_LABEL; antes de medir, igual que la copia de «Nueva tarea»). */}
+                <PlusStack size={16} /> {headerFit === "tight" || headerFit === "icons" ? null : t("Varias tareas")}
               </button>,
               document.body,
             )}

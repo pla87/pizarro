@@ -2,6 +2,34 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.75.0 — 2026-11-27 12:08
+
+Aviso al revocar un enlace de «Compartir fuera», historial desde el número de versión, «Varias tareas» siempre a mano, «Casa y familia» sin Persona 1/2, releases y plan que esperan sus datos, revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- «Compartir fuera»: si otra persona revoca el enlace de tu web, te llega un aviso (campana y, con los avisos de menciones activados, email, Telegram o WhatsApp).
+
+### Mejoras
+
+- «Historial de versiones» se abre pulsando el número de versión del pie del menú (sale del menú).
+- Con una tarea abierta, «Varias tareas» sigue a mano encima del fondo, como «Nueva tarea», y abre «Varias tareas» al lado.
+- «Casa y familia» ya no trae las etiquetas «Persona 1» y «Persona 2» (para repartir por personas está «Organizar por personas»).
+- Web de fuera: pulsar una imagen de la descripción la abre en otra pestaña en vez de descargarla.
+- Abrir una tarea con muchos comentarios, y la web de fuera, leen solo los comentarios que se enseñan.
+
+### Correcciones
+
+- «Generar release» espera a saber el número de la release (y avisa con «Reintentar» si no llega): las notas ya no salen sin «R{n}».
+- «Generar plan de trabajo» espera a tus plantillas: ya no salen dos cabeceras al cambiarla.
+- El enlace «Releases» del menú se pone al día tras aplicar una plantilla.
+- Web de fuera: una descarga que no se sirve (fichero ausente o tope de bytes) no gasta el cupo de descargas.
+
+### Cambios técnicos / DB
+
+- Se borra la columna ColumnShare.generatedByName (en desuso desde la v1.73).
+- «Releases» del menú: una sola consulta, en paralelo y compartida con el tablero; el tablero solo precarga el diálogo de release si se usa.
+
 ## v1.74.0 — 2026-11-27 09:28
 
 Quien crea un proyecto es miembro, Releases solo donde se usan, columna nueva antes de «Hecho», web de fuera con tope de bytes y miniatura que abre la imagen, CI más rápida, limpieza de código

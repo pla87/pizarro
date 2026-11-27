@@ -101,6 +101,15 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   (`releaseNav.ts`; el tablero lo apunta con sus columnas en vivo y el layout da el dato inicial; sin dato, se enseña).
 - (Ronda 71) «Añadir columna» va antes de la primera columna terminada (`personColumnSlots`, como «Organizar por
   personas»); devuelve `moved` y el deshacer devuelve esas posiciones. Sin columna terminada, al final sin renumerar.
+- (Ronda 72) Aviso `SHARE_REVOKED`: solo en la revocación manual (`revokeShareLink`, `updateMany` con `revokedAt: null`:
+  dos a la vez dan un aviso) y si quien revoca no es quien generó y esa persona sigue activa y ve el proyecto. Extracto
+  «quien␞columna» (`shareRevokedExcerpt`); en el email la columna va escapada (`notificationHeadline` recibe `column`).
+  Imágenes de la descripción de la web de fuera: enlazan a `?inline=open` (cuenta como vista) salvo dentro de otro enlace.
+  Una descarga contada que no se sirve (404 o tope de bytes) devuelve su cupo (`releaseShareDownload`).
+- (Ronda 72) «Releases» del menú: `releaseUse` (`src/lib/release-nav.ts`, `cache()`) lo comparten el layout y el tablero;
+  el layout lo lanza en paralelo solo con un id válido; `useServerReleaseNav` apunta en el cliente lo que trae el layout
+  tras un `router.refresh()`. «Generar release» y «Generar plan de trabajo» no se activan hasta tener el número de release
+  y las plantillas (`data-release-number`, `data-plan-setup`).
 
 ## Navegador e interfaz
 
@@ -198,8 +207,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - (Ronda 71) Quitar una columna en desuso son dos versiones aunque ya no se use: primero sale del esquema (el cliente nuevo
   deja de leerla en las consultas sin `select`), y el `DROP COLUMN` va en la versión siguiente. La v1.73 aún lee
   `ColumnShare.generatedByName` (consultas sin `select` en `actions/share-out.ts`) y la vacía en `user-delete.ts`: la v1.74
-  la quita del esquema y la v1.75 la borra. Lo mismo con un valor de enum: `SHARE_REVOKED` existe desde la v1.74 y nada lo
-  escribe hasta la v1.75.
+  la quitó del esquema y la v1.75 la borra (`20261206100000`). Lo mismo con un valor de enum: `SHARE_REVOKED` existe desde
+  la v1.74 y lo escribe la v1.75 (`revokeShareLink`).
+- (Ronda 72) Prisma 7 no pone LIMIT a un `take` anidado: lee todas las filas hijas y recorta en memoria. Para listas que
+  pueden ser largas (comentarios), consulta aparte de primer nivel con `take` (`getTaskDetail`) o SQL con
+  `ROW_NUMBER() OVER (PARTITION BY …)` para un tope por padre (`latestComments` en `share-out.ts`).
 
 ## Base de datos
 

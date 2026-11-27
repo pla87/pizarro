@@ -3,7 +3,7 @@
 import { BrandMark } from "@/components/ui/BrandMark";
 import { useFocusRingScroll } from "@/components/ui/useFocusRingScroll";
 import {
-  Archive, Bell, CalendarDays, ChevronsUpDown, FileText, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
+  Archive, Bell, CalendarDays, ChevronsUpDown, FileText, FolderKanban, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, Shield, SlidersHorizontal, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -47,7 +47,7 @@ import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { loadWhenOnline } from "@/lib/connection";
 import { useActionTransition } from "@/components/useActionTransition";
 import { showProjectIntroOnce } from "@/components/board/ProjectIntroNotice";
-import { useReleaseNav } from "@/components/board/releaseNav";
+import { useReleaseNav, useServerReleaseNav } from "@/components/board/releaseNav";
 
 interface Props {
   user: CurrentUser;
@@ -90,6 +90,7 @@ export function AppShell(props: Props) {
 
 function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, releaseNav = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, feedback = null, children }: Props) {
   useFocusRingScroll();
+  useServerReleaseNav(releaseNav);
   const t = useT();
   const pathname = usePathname();
   // El menú móvil se cierra solo al navegar: queda asociado a la ruta en que se abrió.
@@ -378,7 +379,6 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
           {diskLow && <span className="h-2 w-2 rounded-full bg-red-500" role="img" aria-label={t("El disco del servidor está casi lleno")} title={t("El disco del servidor está casi lleno")} />}
           {updateAvailable && <span className="h-2 w-2 rounded-full bg-sky-500" role="img" aria-label={t("Hay una versión nueva de Pizarro")} title={t("Hay una versión nueva de Pizarro")} />}
         </NavLink>}
-        <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>
         <InstallApp />
       </nav>
 
@@ -389,7 +389,16 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
           <Avatar id={user.id} name={user.name} size="md" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{user.name}</div>
-            <HoverPrefetchLink href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</HoverPrefetchLink>
+            {/* El historial se abre desde aquí (ronda 72: ya no tiene entrada en el menú), también en el menú del móvil. */}
+            <HoverPrefetchLink
+              href="/changelog"
+              className="text-xs text-slate-500 hover:underline dark:text-slate-400"
+              aria-label={t("Historial de versiones (v{version})", { version })}
+              title={t("Historial de versiones (v{version})", { version })}
+              aria-current={pathname === "/changelog" ? "page" : undefined}
+            >
+              v{version}
+            </HoverPrefetchLink>
           </div>
           <FeedbackButton />
           <form action={logout} onSubmit={() => clearDraftsOnLogout(user.clearDraftsOnLogout)}>

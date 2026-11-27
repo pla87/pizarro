@@ -18,10 +18,10 @@ import { rehashShareTokens, rotateEncryptedSecrets, type RotationDb } from "../.
 import { flushLogs } from "../../src/lib/log";
 import { subscribeProject } from "../../src/lib/realtime";
 import { eraseUser } from "../../src/lib/user-delete";
-import { externalNotice } from "../../src/lib/notification-text";
+import { externalNotice, shareRevokedExcerpt } from "../../src/lib/notification-text";
 import { buildProjectExport } from "../../src/lib/project-export/export";
 import { importProjectFile } from "../../src/lib/project-export/import";
-import { rateLimit } from "../../src/lib/rate-limit";
+import { rateLimit, releaseRateLimit } from "../../src/lib/rate-limit";
 import { shareReportStatus } from "../../src/lib/report-build";
 import { boardShareOf, SHARE_BOARD_SELECT } from "../../src/lib/share-out-board";
 import { countActiveShares, purgeEndedShares, revokeProjectShares } from "../../src/lib/share-out";
@@ -814,5 +814,90 @@ describe("compartir fuera: segunda vuelta de la revisión", () => {
     await withEnv({ TOKEN_SECRET: B, TOKEN_SECRET_PREVIOUS: undefined }, async () => {
       assert.equal((await page(token)).status, 200);
     });
+  });
+});
+
+describe("compartir fuera: aviso de enlace revocado (ronda 72)", () => {
+  const revokedNotices = (userId: string, projectId: string) => db.notification.findMany({ where: { userId, projectId, type: "SHARE_REVOKED" } });
+
+  test("si otra persona revoca a mano, quien generó la web recibe un aviso en la campana (una sola vez)", async () => {
+    const { ana, f, me } = await setup();
+    await generate(f.columns.todo);
+    await loginAs(ana);
+    const [a, b] = await Promise.all([revokeShareLink(f.columns.todo), revokeShareLink(f.columns.todo)]);
+    expectOk(a);
+    expectOk(b);
+    const got = await revokedNotices(me.id, f.project.id);
+    assert.equal(got.length, 1, "dos «Revocar» a la vez dan un solo aviso");
+    assert.equal(got[0]!.excerpt, shareRevokedExcerpt("Ana López", "Por hacer"));
+    assert.deepEqual([got[0]!.taskId, got[0]!.actorId, got[0]!.readAt], [null, null, null]);
+    assert.equal((await revokedNotices(ana.id, f.project.id)).length, 0, "quien revoca no se avisa a sí misma");
+    // Revocar otra vez un enlace ya revocado no avisa.
+    expectOk(await revokeShareLink(f.columns.todo));
+    assert.equal((await revokedNotices(me.id, f.project.id)).length, 1);
+  });
+
+  test("sin aviso si revoca quien la generó, si esa persona ya no está o no ve el proyecto, o si lo revoca el sistema", async () => {
+    const { admin, ana, f, me } = await setup();
+    // Lo revoca quien lo generó.
+    await generate(f.columns.todo);
+    expectOk(await revokeShareLink(f.columns.todo));
+    // Quien lo generó está desactivada.
+    await generate(f.columns.todo);
+    await db.user.update({ where: { id: me.id }, data: { active: false } });
+    await loginAs(ana);
+    expectOk(await revokeShareLink(f.columns.todo));
+    await db.user.update({ where: { id: me.id }, data: { active: true } });
+    // Quien lo generó ya no es miembro del proyecto privado.
+    await loginAs(me);
+    await generate(f.columns.todo);
+    await db.project.update({ where: { id: f.project.id }, data: { isPrivate: true } });
+    await db.projectMember.deleteMany({ where: { projectId: f.project.id, userId: me.id } });
+    await loginAs(ana);
+    expectOk(await revokeShareLink(f.columns.todo));
+    await db.projectMember.create({ data: { projectId: f.project.id, userId: me.id } });
+    await db.project.update({ where: { id: f.project.id }, data: { isPrivate: false } });
+    // Revocaciones automáticas: apagar la función en el proyecto.
+    await loginAs(me);
+    await generate(f.columns.todo);
+    await loginAs(admin);
+    expectOk(await setProjectShareOut(f.project.id, false));
+    assert.equal((await revokedNotices(me.id, f.project.id)).length, 0);
+  });
+
+  test("una descarga que no se sirve (fichero que falta, o sin sitio en el tope de bytes) no gasta el cupo de descargas", async () => {
+    const { f, t1 } = await setup();
+    const att = await db.taskAttachment.create({ data: { taskId: t1.id, originalName: "a.pdf", size: 8, isImage: false, mimeType: "application/pdf" } });
+    const lost = await db.taskAttachment.create({ data: { taskId: t1.id, originalName: "perdido.pdf", size: 8, isImage: false, mimeType: "application/pdf" } });
+    await writeFile(attachmentPath(att.id, "file"), "pdf-data");
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    const dl = `share-out:dl:${shareKeyOf(token)}`;
+    const bytes = `share-out:bytes:${shareKeyOf(token)}`;
+    // Queda una sola descarga en el cupo.
+    for (let i = 0; i < SHARE_LIMITS.downloads.limit - 1; i++) rateLimit(dl, SHARE_LIMITS.downloads.limit, SHARE_LIMITS.downloads.windowMs);
+    for (let i = 0; i < 3; i++) assert.equal((await file(token, lost.id)).status, 404, "el fichero no está en el disco");
+    // Sin sitio en el tope de bytes: 429, y la descarga vuelve al cupo.
+    rateLimit(bytes, SHARE_LIMITS.bytes.limit, SHARE_LIMITS.bytes.windowMs, SHARE_LIMITS.bytes.limit - 4);
+    assert.equal((await file(token, att.id)).status, 429);
+    releaseRateLimit(bytes, SHARE_LIMITS.bytes.limit - 4);
+    assert.equal((await file(token, att.id)).status, 200, "la última descarga del cupo sigue ahí");
+    assert.equal((await file(token, att.id)).status, 429, "y ahora sí está agotado");
+  });
+
+  test("comentarios de la página con tope por tarea en SQL: los últimos de cada una, en orden, sin borrados y con su autor", async () => {
+    const { f, t1, t2 } = await setup();
+    const berta = await makeUser({ name: "Berta Gil" });
+    const n = MAX_SHARE_PAGE_COMMENTS + 3;
+    const at = (min: number) => new Date(Date.now() - min * 60_000);
+    await db.taskComment.createMany({ data: Array.from({ length: n }, (_, i) => ({ taskId: t1.id, authorId: i === n - 1 ? berta.id : null, authorName: i === n - 1 ? null : "Pepe Ruiz", body: `Uno-${i + 1}.`, createdAt: at(n - i + 10) })) });
+    // El más nuevo de todos está borrado: ni sale ni cuenta.
+    await db.taskComment.create({ data: { taskId: t1.id, authorName: "Pepe", body: "Borrado.", createdAt: at(1), deletedAt: new Date() } });
+    await db.taskComment.createMany({ data: [{ taskId: t2.id, authorName: "Luis", body: "Dos-1.", createdAt: at(5) }, { taskId: t2.id, authorName: "Luis", body: "Dos-2.", createdAt: at(4) }] });
+    const html = await (await page(tokenOf((await generate(f.columns.todo)).url))).text();
+    assert.ok(!html.includes("Borrado.") && !html.includes("Uno-3.") && html.includes("Uno-4."), "los 30 últimos de la primera");
+    assert.ok(html.indexOf("Uno-4.") < html.indexOf(`Uno-${n}.`), "del más antiguo al más nuevo");
+    assert.ok(html.indexOf("Dos-1.") < html.indexOf("Dos-2.") && html.indexOf(`Uno-${n}.`) < html.indexOf("Dos-1."), "cada tarea con los suyos");
+    assert.ok(html.includes("Hay 3 comentarios anteriores que no se muestran."));
+    assert.ok(html.includes("Berta") && !html.includes("Berta Gil"), "el autor con cuenta, por su nombre de pila");
   });
 });

@@ -1,6 +1,59 @@
 {
   "versions": [
     {
+      "version": "1.75.0",
+      "date": "2026-11-27",
+      "releasedAt": "2026-11-27T12:08:46+01:00",
+      "summary": "Aviso al revocar un enlace de «Compartir fuera», historial desde el número de versión, «Varias tareas» siempre a mano, «Casa y familia» sin Persona 1/2, releases y plan que esperan sus datos, revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "«Compartir fuera»: si otra persona revoca el enlace de tu web, te llega un aviso (campana y, con los avisos de menciones activados, email, Telegram o WhatsApp)."
+        ],
+        "mejoras": [
+          "«Historial de versiones» se abre pulsando el número de versión del pie del menú (sale del menú).",
+          "Con una tarea abierta, «Varias tareas» sigue a mano encima del fondo, como «Nueva tarea», y abre «Varias tareas» al lado.",
+          "«Casa y familia» ya no trae las etiquetas «Persona 1» y «Persona 2» (para repartir por personas está «Organizar por personas»).",
+          "Web de fuera: pulsar una imagen de la descripción la abre en otra pestaña en vez de descargarla.",
+          "Abrir una tarea con muchos comentarios, y la web de fuera, leen solo los comentarios que se enseñan."
+        ],
+        "correcciones": [
+          "«Generar release» espera a saber el número de la release (y avisa con «Reintentar» si no llega): las notas ya no salen sin «R{n}».",
+          "«Generar plan de trabajo» espera a tus plantillas: ya no salen dos cabeceras al cambiarla.",
+          "El enlace «Releases» del menú se pone al día tras aplicar una plantilla.",
+          "Web de fuera: una descarga que no se sirve (fichero ausente o tope de bytes) no gasta el cupo de descargas."
+        ],
+        "tecnicos": [
+          "Se borra la columna ColumnShare.generatedByName (en desuso desde la v1.73).",
+          "«Releases» del menú: una sola consulta, en paralelo y compartida con el tablero; el tablero solo precarga el diálogo de release si se usa."
+        ]
+      },
+      "en": {
+        "summary": "Notice when a “Share outside” link is revoked, version history from the version number, “Several tasks” always at hand, “Home and family” without Person 1/2, releases and plans that wait for their data, review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "“Share outside”: if someone else revokes the link of your web, you get a notification (bell and, with mention notifications on, email, Telegram or WhatsApp)."
+          ],
+          "mejoras": [
+            "“Version history” opens by clicking the version number at the bottom of the menu (it leaves the menu).",
+            "With a task open, “Several tasks” stays at hand above the backdrop, like “New task”, and opens “Several tasks” alongside.",
+            "“Home and family” no longer brings the “Person 1” and “Person 2” labels (to split by people there is “Organize by people”).",
+            "Outside web: clicking an image in the description opens it in another tab instead of downloading it.",
+            "Opening a task with many comments, and the outside web, read only the comments that are shown."
+          ],
+          "correcciones": [
+            "“Generate release” waits until it knows the release number (and offers “Retry” if it doesn't arrive): notes no longer come out without “R{n}”.",
+            "“Generate work plan” waits for your templates: no more two headers when changing it.",
+            "The “Releases” menu link updates after applying a template.",
+            "Outside web: a download that isn't served (missing file or byte cap) doesn't use up the download allowance."
+          ],
+          "tecnicos": [
+            "The ColumnShare.generatedByName column is dropped (unused since v1.73).",
+            "“Releases” menu: a single query, in parallel and shared with the board; the board only preloads the release dialog if it's used."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.74.0",
       "date": "2026-11-27",
       "releasedAt": "2026-11-27T09:28:20+01:00",

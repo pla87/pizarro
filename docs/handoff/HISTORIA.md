@@ -14,6 +14,29 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Respuestas del propietario a las preguntas de la v1.75.0 (para la ronda 73, sin aplicar):** 1: R69F1 notas
+generales con la opción A («Nueva nota» dentro de Documentación, mismo editor que las descripciones, autoguardado, fijar
+arriba, buscar, papelera, exportar y copias). 2: probar en real la guía de Railway para la IA, con el propietario delante
+(crea un proyecto de pago). 3: SÍ («¿Descartar el texto?» al importar un texto que no se puede leer). 4: SÍ (decir en el
+diálogo de pasar a privado que quien lo creó conserva el acceso). 5: SÍ (PDF del plan por persona: subtareas con tope en
+SQL). 6: NO (el aviso de revocado se sigue creando antes de responder). 7: NO (imagen dentro de un enlace en la web de
+fuera). Además, rondas propias ya aprobadas: una URL por tarea y el migrador sin Prisma. La Release de la v1.75.0 la lanzó
+la sesión con su permiso.
+
+**Decisiones de la ronda 72 (ya aplicadas, v1.75.0):** el propietario aceptó todas las recomendaciones de la v1.74.0
+(«Compartir fuera» a-f: NO a todas; 7 y 8: NO) y lanzó la Release de la v1.74.0 desde la sesión. Hecho: aviso
+`SHARE_REVOKED` a quien generó la web cuando otra persona revoca a mano (campana y, con la preferencia de menciones, email,
+Telegram y WhatsApp, como los demás avisos de proyecto); `DROP COLUMN generatedByName`; las imágenes de la descripción de
+la web de fuera se abren (`?inline=open`); «Casa y familia» sin «Persona 1/2» (sin migración: la plantilla sin modificar
+se actualiza al arrancar por su huella); R69M1 («Varias tareas» con copia encima del fondo, como «Nueva tarea»); R69M2
+(«Historial de versiones» fuera del menú, desde el número de versión del pie). Revisión y caza de bugs (R69M3/M4) en 3
+vueltas: seguridad y coste (take anidados de Prisma sin LIMIT en el detalle y en la web de fuera, HTML sin escapar en el
+email del aviso nuevo antes de escribirlo, consultas de «Releases» del layout, cupo de descargas que se gastaba en 404/429),
+usuario/admin (release y plan que generaban antes de tener sus datos, menú «Releases» que no se ponía al día, precarga del
+diálogo de release) y el diff de la ronda (sin hallazgos medios). Pendientes del propietario: R69F1 (notas generales:
+propuesta en HANDOFF §6), la prueba real de la guía de Railway (cuesta un proyecto) y las rondas propias de la URL por
+tarea y del migrador sin Prisma.
+
 **Decisiones de la ronda 71 (ya aplicadas, v1.74.0):** respuestas del propietario a las preguntas 1-27 de la v1.73.1.
 1: quien crea un proyecto es miembro (opción B, también en uno de equipo y al importar; los de antes no cambian). 2: pidió
 las opciones (a-f) y sigue sin decidir (no se hace ninguna). Para el resto, «sigue tu recomendación»: SÍ a 3 (Organizar por

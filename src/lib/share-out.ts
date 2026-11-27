@@ -204,7 +204,10 @@ export async function noteShareUse(share: ActiveShare, now: Date = new Date()): 
 
 /** Tope de peticiones por IP de todas las rutas de /x/ (mapa general del limitador: se cuenta antes de mirar el token). */
 export const shareIpAllowed = (ip: string): boolean => rateLimit(shareIpKey(rateIp(ip)), SHARE_LIMITS.ip.limit, SHARE_LIMITS.ip.windowMs);
-export const shareDownloadAllowed = (share: ActiveShare): boolean => rateLimit(`share-out:dl:${share.key}`, SHARE_LIMITS.downloads.limit, SHARE_LIMITS.downloads.windowMs);
+const shareDownloadKey = (share: ActiveShare): string => `share-out:dl:${share.key}`;
+export const shareDownloadAllowed = (share: ActiveShare): boolean => rateLimit(shareDownloadKey(share), SHARE_LIMITS.downloads.limit, SHARE_LIMITS.downloads.windowMs);
+/** Devuelve al cupo una descarga contada que al final no se sirve (el fichero no está o no cabe en el tope de bytes). */
+export const releaseShareDownload = (share: ActiveShare): void => releaseRateLimit(shareDownloadKey(share));
 
 /**
  * Tope de bytes servidos por enlace y hora: suma el tamaño de lo que se va a servir (la miniatura, el suyo, no el del
@@ -237,13 +240,41 @@ async function liveSharedTasks(share: ActiveShare) {
       assignee: { select: { name: true } },
       subtasks: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true, done: true } },
       attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true, size: true, isImage: true } },
-      // Los últimos (acota el tamaño de la página); los anteriores solo se cuentan.
-      comments: { where: { deletedAt: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: MAX_SHARE_PAGE_COMMENTS, select: { body: true, createdAt: true, authorName: true, author: { select: { name: true } } } },
       _count: { select: { comments: { where: { deletedAt: null } } } },
     },
   });
+  const comments = await latestComments(rows.map((r) => r.id));
   const order = new Map(share.taskIds.map((id, i) => [id, i]));
-  return rows.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  return rows.sort((a, b) => order.get(a.id)! - order.get(b.id)!).map((r) => ({ ...r, comments: comments.get(r.id) ?? [] }));
+}
+
+type ShareComment = { body: string; createdAt: Date; authorName: string | null; author: { name: string } | null };
+
+/**
+ * Los últimos MAX_SHARE_PAGE_COMMENTS comentarios sin borrar de cada tarea (acota el tamaño de la página; los anteriores
+ * solo se cuentan), del más nuevo al más antiguo. En SQL y no con un `take` anidado: Prisma 7 no le pone LIMIT por tarea
+ * (leía todos los comentarios de todas las tareas y recortaba en memoria).
+ */
+async function latestComments(taskIds: string[]): Promise<Map<string, ShareComment[]>> {
+  const out = new Map<string, ShareComment[]>();
+  if (!taskIds.length) return out;
+  const rows = await db.$queryRaw<{ taskId: string; body: string; createdAt: Date; authorName: string | null; userName: string | null; authorId: string | null }[]>`
+    SELECT c."taskId", c."body", c."createdAt", c."authorName", c."authorId", u."name" AS "userName"
+    FROM (
+      SELECT "id", "taskId", "body", "createdAt", "authorName", "authorId",
+             ROW_NUMBER() OVER (PARTITION BY "taskId" ORDER BY "createdAt" DESC, "id" DESC) AS "rn"
+      FROM "TaskComment"
+      WHERE "taskId" = ANY(${taskIds}::text[]) AND "deletedAt" IS NULL
+    ) c
+    LEFT JOIN "User" u ON u."id" = c."authorId"
+    WHERE c."rn" <= ${MAX_SHARE_PAGE_COMMENTS}
+    ORDER BY c."taskId", c."createdAt" DESC, c."id" DESC`;
+  for (const r of rows) {
+    const list = out.get(r.taskId) ?? [];
+    list.push({ body: r.body, createdAt: r.createdAt, authorName: r.authorName, author: r.authorId && r.userName !== null ? { name: r.userName } : null });
+    out.set(r.taskId, list);
+  }
+  return out;
 }
 
 /** Primera columna «terminada» del proyecto (adonde va «Marcar como hecha»), o null. */

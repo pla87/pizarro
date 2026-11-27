@@ -112,6 +112,21 @@ test("Markdown de la página: imágenes de la tarea a la ruta de descarga, ajena
   assert.ok(html.includes("<u>subrayado</u>"));
 });
 
+test("ronda 72: pulsar una imagen de la descripción la abre en otra pestaña (?inline=open), sin enlaces anidados", () => {
+  const token = "T".repeat(43);
+  const opts = { token, attachments: new Set(["att1"]), appOrigin: "https://pizarro.example.com" };
+  const html = shareMarkdownHtml("![plano](/api/attachments/att1)", opts);
+  const img = `<img alt="plano" src="${shareAttachmentPath(token, "att1", true)}" loading="lazy">`;
+  assert.ok(html.includes(`<a href="${shareAttachmentPath(token, "att1", "open")}" target="_blank" rel="noopener noreferrer">${img}</a>`), html);
+  assert.ok(!html.includes(`href="${shareAttachmentPath(token, "att1")}"`), "ya no lleva a la descarga");
+  // Una imagen dentro de un enlace (externo o al adjunto) va sin su propio enlace: nunca un <a> dentro de otro.
+  for (const md of ["[![plano](/api/attachments/att1)](https://example.com/doc)", "[![plano](/api/attachments/att1)](/api/attachments/att1)"]) {
+    const out = shareMarkdownHtml(md, opts);
+    assert.equal(out.match(/<a /g)?.length, 1, out);
+    assert.ok(out.includes(img), out);
+  }
+});
+
 const pageData = (over: Partial<SharePageData> = {}): SharePageData => ({
   token: "A".repeat(43),
   columnName: "Proveedor <b>",

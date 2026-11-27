@@ -17,11 +17,19 @@ export function projectNoticePath(kind: NotificationKind, projectId: string): st
 
 const REVOKED_SEP = "";
 
-// Extracto del aviso SHARE_REVOKED: «quien␞columna» (los dos con el separador U+001E cambiado por un espacio). Lo
-// escribirá la v1.75 al revocar el enlace (`${who}${REVOKED_SEP}${column}`); la v1.74 ya sabe pintarlo.
+/**
+ * Extracto del aviso SHARE_REVOKED: quién revocó el enlace y de qué columna («quien␞columna», los dos con el separador
+ * U+001E cambiado por un espacio y recortados para que la columna no se pierda al cortar el extracto). Lo escribe la
+ * v1.75 al revocar el enlace a mano (notifyShareRevoked); la v1.74 ya sabe pintarlo.
+ */
+export function shareRevokedExcerpt(who: string, column: string): string {
+  // Por puntos de código (no por unidades UTF-16): un emoji no se parte por la mitad.
+  const part = (s: string, max: number) => [...s.replaceAll(REVOKED_SEP, " ")].slice(0, max).join("");
+  return `${part(who, 80)}${REVOKED_SEP}${part(column, 110)}`;
+}
 
 /** Quién y qué columna de un aviso SHARE_REVOKED. */
-function shareRevokedParts(excerpt: string): { who: string; column: string } {
+export function shareRevokedParts(excerpt: string): { who: string; column: string } {
   const [who = "", ...rest] = excerpt.split(REVOKED_SEP);
   return { who, column: rest.join(" ") };
 }
@@ -33,13 +41,14 @@ export const projectNoticeActor = (kind: NotificationKind, excerpt: string): str
  * Frase de cabecera del aviso, con `{actor}` y `{task}` ya sustituidos por los textos recibidos. En un aviso de proyecto
  * `task` es el nombre del proyecto entre comillas y `actor`, lo que guarda el extracto: la cuenta borrada
  * (PROJECT_TO_TEAM) o quien se ha dado de baja del informe semanal (REPORT_UNSUBSCRIBED).
+ * En SHARE_REVOKED la columna sale del extracto; quien escribe HTML (el email) la pasa ya escapada en `column`.
  */
-export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string; excerpt?: string }): string {
+export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string; excerpt?: string; column?: string }): string {
   if (externalNotice(vars.excerpt)?.what === "done") return t("{actor} ha marcado como hecha {task}", vars);
   switch (kind) {
     case "PROJECT_TO_TEAM": return t("El proyecto {task} de {actor} ha pasado a ser de equipo al borrarse su cuenta", vars);
     case "REPORT_UNSUBSCRIBED": return t("{actor} se ha dado de baja del informe semanal de {task}", vars);
-    case "SHARE_REVOKED": return t("{actor} ha revocado el enlace de la web de «{column}»", { actor: vars.actor, column: shareRevokedParts(vars.excerpt ?? "").column });
+    case "SHARE_REVOKED": return t("{actor} ha revocado el enlace de la web de «{column}»", { actor: vars.actor, column: vars.column ?? shareRevokedParts(vars.excerpt ?? "").column });
     case "ASSIGNED": {
       // Un lote (alta masiva o importación): un solo aviso que enlaza a la primera tarea; la cabecera dice cuántas son.
       const n = vars.excerpt === undefined ? null : assignedBatchCount(vars.excerpt);
