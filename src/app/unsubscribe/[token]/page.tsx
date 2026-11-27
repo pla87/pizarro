@@ -13,9 +13,9 @@ async function tFor(target: UnsubscribeTarget | null) {
   return target?.locale ? makeT(toLocale(target.locale)) : getT();
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
-  const t = await tFor(await resolveUnsubscribe(token));
+// El título de la pestaña, en el idioma de la instancia: resolver aquí el token sería una consulta antes del tope de intentos.
+export async function generateMetadata() {
+  const t = await getT();
   return { title: t("Dejar de recibir estos emails"), robots: { index: false, follow: false } };
 }
 
