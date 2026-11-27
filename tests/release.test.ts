@@ -370,6 +370,11 @@ test("descarga: las imágenes de la descripción, en su línea y con la ruta del
     "  ![c](/api/attachments/a1)",
     "  ```",
   ].join("\n"));
+  // La línea «Adjuntos:» no repite las imágenes que la descripción ya enlaza al ZIP; sin otros adjuntos, no sale.
+  const withList = (names: string) => ["- **R3F1** · Tarea", "", `  Adjuntos: ${names}`, "", "  ![p](/api/attachments/a1)", "", "- **R3F2** · Otra", "", "  Adjuntos: R3F2_x.webp"].join("\n");
+  assert.equal(releaseDownloadText(withList("R3F1_pegada.webp"), files), ["- **R3F1** · Tarea", "", "  ![p](R3F1_pegada.webp)", "", "- **R3F2** · Otra", "", "  Adjuntos: R3F2_x.webp"].join("\n"));
+  assert.ok(releaseDownloadText(withList("R3F1_pegada.webp, R3F1_log.txt"), files).includes("  Adjuntos: R3F1_log.txt\n"));
+  assert.equal(releaseDownloadText(withList("R3F1_pegada.webp"), new Map()).includes("Adjuntos: R3F1_pegada.webp"), true, "sin ZIP no hay fichero que citar: se queda");
   // Sin ZIP: texto, nunca un enlace roto. En inglés, «image».
   assert.ok(releaseDownloadText("  ![pegada.png](/api/attachments/a1)", new Map()).startsWith("  [imagen: pegada.png]"));
   assert.equal(releaseDownloadText("![](/api/attachments/a1)", new Map(), (x) => (x === "imagen" ? "image" : x)), "[image]");

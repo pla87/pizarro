@@ -236,17 +236,54 @@ const CODE_FENCE = /^\s*(?:`{3,}|~{3,})/;
 const KEEPS_LINE = /^\s*(?:\||>|(?:[-*+]|\d+[.)])\s)/;
 
 /**
+ * La línea «Adjuntos:» de cada tarea, sin las imágenes que su descripción ya muestra enlazadas a su fichero del ZIP (como
+ * hace el plan para IA); si era todo lo que decía, la línea (y su línea en blanco) no sale. La descripción de una tarea
+ * llega hasta la siguiente línea sin sangría. Solo en lo que se descarga: «Copiar todo» y el histórico no cambian.
+ */
+function withoutCitedAttachments(lines: string[], files: ReadonlyMap<string, string>, t: T): string[] {
+  const prefix = `  ${t("Adjuntos")}: `;
+  const out: string[] = [];
+  let fenced = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.startsWith(prefix)) {
+      out.push(line);
+      continue;
+    }
+    const cited = new Set<string>();
+    fenced = false;
+    for (let j = i + 1; j < lines.length; j++) {
+      const l = lines[j]!;
+      if (l.trim() && !/^\s/.test(l)) break;
+      if (CODE_FENCE.test(l)) fenced = !fenced;
+      if (fenced || !l.includes("](")) continue;
+      // matchAll parte del lastIndex que dejó otro uso de la expresión (global): se clona limpia.
+      for (const m of l.matchAll(new RegExp(MD_IMAGE))) {
+        const file = files.get(APP_ATTACHMENT.exec(m[2]!.startsWith("<") ? m[2]!.slice(1, -1) : m[2]!)?.[1] ?? "");
+        if (file) cited.add(file);
+      }
+    }
+    const names = line.slice(prefix.length).split(", ");
+    const rest = names.filter((n) => !cited.has(n));
+    if (rest.length === names.length) out.push(line);
+    else if (rest.length) out.push(`${prefix}${rest.join(", ")}`);
+    else if (lines[i + 1] === "") i++;
+  }
+  return out;
+}
+
+/**
  * Texto de la release tal como se descarga (.md y .txt). Las imágenes de la descripción apuntan a `/api/attachments/…`, un
  * enlace de Pizarro que fuera de la app no abre. Cada una va en su propia línea (con la sangría de su línea; en una fila de
  * tabla, una cita o un elemento de lista se queda en la misma línea, separada por un espacio del texto anterior) y:
  * si su adjunto va en el ZIP (`files`, id → nombre del fichero), como imagen con la ruta relativa del fichero, que queda
- * junto al texto al descomprimir; si no, como texto «[imagen: nombre]». Las imágenes de otros sitios no cambian, ni lo que
+ * junto al texto al descomprimir (y la línea «Adjuntos:» de la tarea ya no la repite); si no, como texto «[imagen: nombre]». Las imágenes de otros sitios no cambian, ni lo que
  * va dentro de un bloque de código. `t`: idioma de quien lo descarga.
  */
 export function releaseDownloadText(text: string, files: ReadonlyMap<string, string>, t: T = esT): string {
   let fenced = false;
   const out: string[] = [];
-  for (const line of text.split("\n")) {
+  for (const line of withoutCitedAttachments(text.split("\n"), files, t)) {
     if (CODE_FENCE.test(line)) fenced = !fenced;
     if (fenced || !line.includes("](")) {
       out.push(line);

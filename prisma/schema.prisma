@@ -713,6 +713,9 @@ enum NotificationType {
   /// A quien configuró el informe semanal: su destinatario se ha dado de baja desde el enlace del email (projectId;
   /// excerpt = nombre de esa persona o, si no tiene cuenta, su dirección enmascarada).
   REPORT_UNSUBSCRIBED
+  /// A quien generó la web de «Compartir fuera»: otra persona del proyecto revocó su enlace (projectId; excerpt =
+  /// «quiencolumna», ver shareRevokedExcerpt). Solo se añade el valor (v1.74): la v1.75 empezará a escribirlo.
+  SHARE_REVOKED
 }
 
 /// Seguimiento de una tarea. Se sigue implícitamente al crearla, tener asignada, comentar o ser mencionado
