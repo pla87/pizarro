@@ -287,7 +287,7 @@ function ChannelControls({ channel, prefs, canTest, mentionsOnly, refresh }: { c
   const toast = useToast();
   const [pending, start] = useTransition();
   const [form, setForm] = useState(prefs);
-  const prefLabels = noticeLabels(t).map(([kind, label]) => ({ key: PREF_KEYS[kind], label }));
+  const prefLabels = noticeLabels(t, { notes: false }).map(([kind, label]) => ({ key: PREF_KEYS[kind], label }));
   const dirty = prefLabels.some(({ key }) => form[key] !== prefs[key]);
   const id = channel.toLowerCase();
 

@@ -134,6 +134,7 @@ export const colaboracion: Record<string, string> = {
   "Pocos y urgentes: salen siempre al momento.": "Few and urgent: always sent right away.",
   "Emails sobre proyectos": "Emails about projects",
   "Menciones en tareas y notas": "Mentions in tasks and notes",
+  "Menciones en tareas": "Mentions in tasks",
   "Frecuencia de los emails": "Email frequency",
   "Resumen diario": "Daily digest",
   "a las": "at",
