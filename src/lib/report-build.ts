@@ -61,10 +61,10 @@ export class PdfTimeoutError extends AppError {
 
 /** Con tantos renders ya esperando turno, los nuevos se rechazan al instante (503) en vez de apilarse sin fin. */
 export const PDF_MAX_WAITING = 5;
-export const PDF_BUSY_MESSAGE = "Hay muchos PDF generándose; inténtalo en un momento.";
+const PDF_BUSY_MESSAGE = "Hay muchos PDF generándose; inténtalo en un momento.";
 /** Como mucho tantos PDF a la vez (en cola o pintándose) por persona; el siguiente se rechaza al instante (503). */
-export const PDF_MAX_PER_OWNER = 2;
-export const PDF_OWNER_BUSY_MESSAGE = "Ya tienes PDF generándose: espera a que terminen.";
+const PDF_MAX_PER_OWNER = 2;
+const PDF_OWNER_BUSY_MESSAGE = "Ya tienes PDF generándose: espera a que terminen.";
 
 /**
  * Quien pidió el PDF ya no lo espera (cerró la pestaña, canceló la descarga): su render sale de la cola o, si ya se
