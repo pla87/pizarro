@@ -436,7 +436,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
     avisos de `deliver`; los códigos y las pruebas tienen sus propios topes. Un envío nuevo de avisos por WhatsApp pasa
     por `reserveWhatsappNotice`.
   - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
-- (Ronda 75, v1.78) Avisos push del navegador, sin dependencias (`node:crypto`): `src/lib/web-push-core.ts` (cifrado
+- (Ronda 74, v1.78) Avisos push del navegador, sin dependencias (`node:crypto`): `src/lib/web-push-core.ts` (cifrado
   aes128gcm RFC 8291, JWT VAPID RFC 8292, lista cerrada de servicios push), `web-push.ts` (clave VAPID en AppState
   `push.vapidEnc`, cifrada y creada sola; dispositivos en `PushSubscription` con endpoint y claves cifrados;
   `sendPushToUser`), `web-push-text.ts` (texto: quién y qué tarea o nota, nunca lo escrito), `actions/push.ts`,
@@ -454,6 +454,17 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   desuscribe (`forgetPushOnThisDevice`). Pruebas:
   `tests/push.test.ts` (vector del RFC 8291) y `tests/db/push.test.ts` (servidor push falso con `tests/web-push-fake.ts`).
 
+- (Ronda 75, v1.79) Avisos por email: `User.emailNotices` (casilla principal: apagada, ningún email de avisos ni resumen),
+  `User.notifyAdminEmail` (administración/importantes, siempre al momento: PROJECT_TO_TEAM, REPORT_UNSUBSCRIBED,
+  SHARE_REVOKED y «te han añadido a un proyecto», con enlace de baja `admin`/`x`), `notifyEmail` = menciones en tareas y
+  notas, y la frecuencia es `dailyDigest` (resumen = lo de proyectos solo en el resumen). `User.noteMentionEmail` ya no se
+  lee ni se escribe (quitar la columna en una versión posterior); `collab-prefs` lo acepta e ignora. Los códigos de baja
+  viejos siguen valiendo. El resumen trae menciones, cambios de fecha/«Esperando» y solo comentarios de tareas seguidas.
+- (Ronda 75, v1.79) Push: «Probar» va solo a este dispositivo (`testPush({hash})`). El service worker renueva la
+  suscripción en `pushsubscriptionchange` con `/api/push/renew` (mismo origen, sesión, tope y solo la fila propia de esa
+  sesión por huella); si no puede, `push-sync-core.ts` resincroniza al cargar con la huella de `localStorage`
+  (`pz-push-hash`), nunca reactiva lo quitado. `badge` = `public/push-badge.png` (silueta, `scripts/push-badge.mjs`), fuera
+  del matcher del proxy.
 ## Tareas de fondo y copias
 
 - (Ronda 62) Tareas de fondo que no hacen nada: devuelven `{ skipped: "<motivo>" }` y `runJob` lo guarda en `JobRun.lastError` con el

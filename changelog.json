@@ -1,6 +1,63 @@
 {
   "versions": [
     {
+      "version": "1.79.0",
+      "date": "2026-11-28",
+      "releasedAt": "2026-11-28T13:34:25+01:00",
+      "summary": "Avisos por email más simples, avisos push que se prueban en este dispositivo y se renuevan solos, icono de silueta, revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Mi perfil → Avisos → «Avisos por email» más simple: una casilla principal; una casilla de avisos de administración o importantes (siempre al momento); y los emails sobre proyectos («Menciones en tareas y notas», «Cuando me asignan una tarea», «Cambios de fecha límite y recordatorios», «Comentarios y respuestas en tareas que sigo») con «Frecuencia de los emails»: al momento o resumen diario."
+        ],
+        "mejoras": [
+          "Avisos en el dispositivo: «Probar» prueba solo este dispositivo y solo si está activado; si algo falla al activarlos, se dice qué y, en Windows y macOS, dónde mirar los permisos del sistema; textos más cortos; icono de silueta en la barra de estado de Android y vibración corta; la suscripción se renueva sola si el navegador la cambia.",
+          "El resumen diario trae ahora también las menciones en tareas y los cambios de fecha y recordatorios, y solo los comentarios de tareas que sigues (sin repetir los que ya salen en menciones).",
+          "Si el servidor estuvo parado el día del informe semanal, sale al día siguiente desde la hora elegida (si no cambiaste el horario).",
+          "Una «Nueva nota» que se cierra sin escribir nada se descarta sola; los borradores locales de notas se borran al cerrar sesión.",
+          "Móvil: el botón Atrás cierra el menú; con el teclado abierto se ocultan los botones flotantes de crear; «Recordar este dispositivo» conserva su marca si te equivocas de código.",
+          "El primer administrador tiene 30 minutos para configurar el segundo paso; nadie puede agotar a otra persona el «¿Olvidaste tu contraseña?»."
+        ],
+        "correcciones": [
+          "Rutinas: si su columna destino pasa a terminada o a Rutinas, deja de ser destino (con deshacer) y la siguiente aparición no nace ya hecha.",
+          "Editar una tarea que otra persona acaba de archivar da un aviso en vez de cambiarla.",
+          "Logs: crear un documento de Google, borrar o restablecer plantillas, recuperar las de serie y quitar adjuntos de una release dicen qué se hizo."
+        ],
+        "tecnicos": [
+          "Migración que solo añade: User.emailNotices y User.notifyAdminEmail (User.noteMentionEmail deja de leerse).",
+          "Notas: la cuota se comprueba al cruzar cada 64 KB, no en cada guardado; HEAD y 304 sin leer el texto.",
+          "Logs: las categorías del filtro son fijas (sin recorrer la tabla).",
+          "Ruta /api/push/renew para la renovación desde el service worker (mismo origen, sesión y solo la suscripción propia de esa sesión)."
+        ]
+      },
+      "en": {
+        "summary": "Simpler email notifications, push notifications tested on this device and renewed automatically, silhouette icon, review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "My profile → Notifications → “Email notifications” is simpler: one main checkbox; an admin or important notices checkbox (always immediate); and project emails (“Mentions in tasks and notes”, “When I'm assigned a task”, “Due date changes and reminders”, “Comments and replies on tasks I follow”) with “Email frequency”: immediately or daily summary."
+          ],
+          "mejoras": [
+            "Device notifications: “Test” only tests this device and only if it is on; if turning them on fails, it says why and, on Windows and macOS, where to check the system permissions; shorter texts; silhouette icon in the Android status bar and a short vibration; the subscription renews itself if the browser changes it.",
+            "The daily summary now also includes task mentions and due date changes and reminders, and only comments on tasks you follow (without repeating those already under mentions).",
+            "If the server was down on the weekly report day, it goes out the next day from the chosen time (if you didn't change the schedule).",
+            "A “New note” closed without writing anything is discarded; local note drafts are cleared on sign-out.",
+            "Mobile: the Back button closes the menu; with the keyboard open the floating create buttons hide; “Remember this device” keeps its tick if you mistype the code.",
+            "The first admin has 30 minutes to set up two-step verification; nobody can exhaust someone else's “Forgot your password?”."
+          ],
+          "correcciones": [
+            "Routines: if its target column becomes done or Routines, it stops being the target (with undo) and the next occurrence isn't born already done.",
+            "Editing a task someone else just archived shows a notice instead of changing it.",
+            "Logs: creating a Google document, deleting or resetting templates, restoring the built-in ones and removing a release's attachments say what was done."
+          ],
+          "tecnicos": [
+            "Migration that only adds: User.emailNotices and User.notifyAdminEmail (User.noteMentionEmail is no longer read).",
+            "Notes: the quota is checked when crossing each 64 KB, not on every save; HEAD and 304 without reading the text.",
+            "Logs: the filter categories are fixed (no table scan).",
+            "/api/push/renew route for renewal from the service worker (same origin, session and only that session's own subscription)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.78.0",
       "date": "2026-11-27",
       "releasedAt": "2026-11-27T23:09:26+01:00",
