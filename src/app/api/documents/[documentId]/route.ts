@@ -49,7 +49,8 @@ async function serve(req: Request, ctx: { params: Promise<{ documentId: string }
 
   // Una nota (escrita en la app) no tiene fichero: se sirve su texto, como un .md, con la versión en el ETag. `size` ya
   // son los bytes de su texto (se guarda con él), así que HEAD y el 304 no leen el texto.
-  const isNote = await isNoteDocument(doc.id);
+  // Las notas son siempre MARKDOWN (createNoteRow, import): para imágenes, PDF y demás no se hace la consulta.
+  const isNote = doc.kind === "MARKDOWN" && (await isNoteDocument(doc.id));
   const file = documentPath(doc.id);
   let size: number;
   let stamp: string;

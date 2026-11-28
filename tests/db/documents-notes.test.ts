@@ -126,15 +126,20 @@ describe("notas: crear y guardar", () => {
     const q = await makeProject({ members: [m] });
     const small = expectOk(await createNote(q.project.id));
     const KB = 1024;
-    await db.projectDocument.create({ data: { projectId: q.project.id, name: "grande.bin", mimeType: "application/octet-stream", size: 1 * MB - 70 * KB, kind: "OTHER", createdById: m.id } });
+    // Quedan solo 10 KB libres: un crecimiento de 30 KB que no cruza ningún múltiplo de 64 KB se guarda SIN comprobar la
+    // cuota (pasaría igual de cabida; con la comprobación activa fallaría), y al cruzar sí se comprueba.
+    const big = await db.projectDocument.create({ data: { projectId: q.project.id, name: "grande.bin", mimeType: "application/octet-stream", size: 1 * MB - 10 * KB, kind: "OTHER", createdById: m.id } });
     await withQuota(1, async () => {
-      // Un crecimiento pequeño no cruza ningún múltiplo de 64 KB: se guarda sin comprobar.
       assert.equal(expectOk(await saveNote(small.id, "a".repeat(30 * KB), 0)).status, "saved");
+      assert.equal((await doc(small.id)).noteContent, "a".repeat(30 * KB));
+      // Cruza los 64 KB: se comprueba y no cabe. Queda el texto anterior.
       expectFail(await saveNote(small.id, "a".repeat(100 * KB), 1), /[Cc]uota/);
       assert.equal((await doc(small.id)).noteContent, "a".repeat(30 * KB));
-      // Lo que ya ocupaba cuenta: crecer hasta el límite sí cabe, y acortar siempre.
-      assert.equal(expectOk(await saveNote(small.id, "a".repeat(70 * KB), 1)).status, "saved");
-      assert.equal(expectOk(await saveNote(small.id, "corta", 2)).status, "saved");
+      // Acortar siempre se guarda, aunque el proyecto esté pasado de cuota.
+      assert.equal(expectOk(await saveNote(small.id, "corta", 1)).status, "saved");
+      // Con hueco suficiente, crecer cruzando los 64 KB sí cabe.
+      await db.projectDocument.update({ where: { id: big.id }, data: { size: 1 * MB - 80 * KB } });
+      assert.equal(expectOk(await saveNote(small.id, "a".repeat(70 * KB), 2)).status, "saved");
       // «Nueva nota» con la cuota llena: se crea vacía (0 bytes), como cabe.
       expectOk(await createNote(q.project.id));
     });
