@@ -344,8 +344,8 @@ describe("resumen diario con el SMTP caído", () => {
       const f = await makeProject({ members: [a, b, other] });
       await makeTask(f, { title: "Novedad", createdById: other.id });
       await db.user.updateMany({ where: { id: { notIn: [a.id, b.id] } }, data: { dailyDigest: false } });
-      await db.user.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { dailyDigest: true, digestHour: 0, lastDigestAt: null } });
-      // La primera consulta de comentarios falla como un socket de PostgreSQL agotado; las demás van bien.
+      await db.user.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { dailyDigest: true, digestHour: 0, lastDigestAt: null, notifyCommentEmail: true } });
+      // La primera consulta de comentarios (solo la hace quien tiene marcados los comentarios) falla como un socket de PostgreSQL agotado; las demás van bien.
       let calls = 0;
       delegate.findMany = (...args) => (++calls === 1 ? Promise.reject(Object.assign(new Error("read ETIMEDOUT"), { code: "ETIMEDOUT" })) : findMany.apply(delegate, args));
       const now = new Date();

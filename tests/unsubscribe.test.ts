@@ -48,7 +48,10 @@ test("baja: cabeceras List-Unsubscribe solo con https, y cada aviso apaga la cas
   });
   assert.deepEqual(core.unsubscribeHeaders("http://localhost:3000/api/unsubscribe/t"), {});
   const kinds = (["MENTION", "PROJECT_TO_TEAM", "REPORT_UNSUBSCRIBED", "ASSIGNED", "DUE_CHANGED", "WAITING", "COMMENT", "REPLY"] as const).map(core.noticeEmailKind);
-  assert.deepEqual(kinds, ["mention", "mention", "mention", "assigned", "due", "due", "comment", "comment"]);
+  assert.deepEqual(kinds, ["mention", "admin", "admin", "assigned", "due", "due", "comment", "comment"]);
+  assert.equal(core.noticeEmailKind("SHARE_REVOKED"), "admin");
+  assert.equal(core.EMAIL_PREF_FIELD.admin, "notifyAdminEmail");
+  assert.equal(core.EMAIL_PREF_FIELD.note, "notifyEmail");
   assert.equal(core.EMAIL_PREF_FIELD.due, "notifyDueEmail");
 });
 

@@ -115,20 +115,22 @@ if (only.includes("profile")) {
   const changePw = page.getByRole("button", { name: "Cambiar contraseña", exact: true });
   L.eq("PERFIL: «Cambiar contraseña» sin rellenar está desactivado", await changePw.isEnabled(), false);
 
+  // Las casillas de email solo se ven con la casilla principal «Recibir avisos por email» marcada (v1.79).
+  await L.q(`UPDATE "User" SET "emailNotices"=true WHERE email=$1`, [L.ADMIN]);
   await page.goto(`${L.BASE}/settings?tab=avisos`);
   const emailCard = page.locator("section").filter({ hasText: "Avisos por email" });
   await emailCard.waitFor({ timeout: 20000 });
   L.eq("AVISOS: una sola tarjeta de email con un solo «Guardar avisos»", await page.getByRole("button", { name: "Guardar avisos" }).count(), 1);
   const saveMention = emailCard.getByRole("button", { name: "Guardar avisos" });
   L.eq("AVISOS: sin cambios, «Guardar avisos» está desactivado", await saveMention.isEnabled(), false);
-  await emailCard.getByRole("checkbox", { name: "Email cuando me mencionan" }).click();
+  await emailCard.getByRole("checkbox", { name: "Menciones en tareas y notas" }).click();
   L.eq("AVISOS: al marcar una casilla, se activa", await saveMention.isEnabled(), true);
-  await emailCard.getByRole("checkbox", { name: "Email cuando me mencionan" }).click();
+  await emailCard.getByRole("checkbox", { name: "Menciones en tareas y notas" }).click();
   L.eq("AVISOS: al volver a como estaba, se desactiva", await saveMention.isEnabled(), false);
   // Lo marcado en una casilla y en otra se guarda junto (antes eran dos tarjetas y guardar una perdía lo de la otra).
   const prefsBefore = (await L.q(`SELECT "notifyEmail" n, "notifyCommentEmail" c FROM "User" WHERE email=$1`, [L.ADMIN]))[0];
-  await emailCard.getByRole("checkbox", { name: "Email cuando me mencionan" }).click();
-  await emailCard.getByRole("checkbox", { name: "Email con los comentarios y respuestas en tareas que sigo" }).click();
+  await emailCard.getByRole("checkbox", { name: "Menciones en tareas y notas" }).click();
+  await emailCard.getByRole("checkbox", { name: "Comentarios y respuestas en tareas que sigo" }).click();
   await saveMention.click();
   await page.getByText("Preferencias guardadas").first().waitFor({ timeout: 10000 });
   const saved = (await L.q(`SELECT "notifyEmail" n, "notifyCommentEmail" c FROM "User" WHERE email=$1`, [L.ADMIN]))[0];

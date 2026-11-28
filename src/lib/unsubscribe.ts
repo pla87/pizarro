@@ -3,8 +3,7 @@ import { db } from "./db";
 import { logEvent } from "./log";
 import { maskEmail } from "./mask-email";
 import { notifyReportUnsubscribed } from "./notify";
-import { noteMentionEmailMode } from "./note-mention-pref";
-import { EMAIL_PREF_FIELD, parseUnsubscribeToken, unsubscribeSignatureOk, type UnsubscribeKind } from "./unsubscribe-core";
+import { EMAIL_PREF_FIELD, PROJECT_EMAIL_FIELDS, parseUnsubscribeToken, unsubscribeSignatureOk, type UnsubscribeKind } from "./unsubscribe-core";
 
 // Baja en un clic (RFC 8058) de los emails de avisos, del resumen diario y del informe semanal. Los emails llevan las
 // cabeceras List-Unsubscribe (POST a /api/unsubscribe/<token>, sin sesión) y un enlace al pie a /unsubscribe/<token>, una
@@ -36,10 +35,10 @@ export async function resolveUnsubscribe(token: string): Promise<UnsubscribeTarg
     if (!s || !unsubscribeSignatureOk(parsed, s.recipient)) return null;
     return { kind: "report", id: parsed.id, projectName: s.project.name, receiving: s.enabled, email: s.recipient, userName: null, locale: null };
   }
-  const u = await db.user.findUnique({ where: { id: parsed.id }, select: { name: true, locale: true, email: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true, noteMentionEmail: true } });
+  const u = await db.user.findUnique({ where: { id: parsed.id }, select: { name: true, locale: true, email: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, notifyAdminEmail: true, dailyDigest: true, emailNotices: true } });
   if (!u || !unsubscribeSignatureOk(parsed, u.email)) return null;
-  // Menciones en notas: las recibe mientras la opción no esté en «No» (al momento o en el resumen).
-  const receiving = parsed.kind === "note" ? noteMentionEmailMode(u) !== "OFF" : u[EMAIL_PREF_FIELD[parsed.kind]];
+  // El resumen trae lo que está marcado en «Emails sobre proyectos»: lo recibe mientras alguna casilla lo esté.
+  const receiving = parsed.kind === "digest" ? u.dailyDigest && PROJECT_EMAIL_FIELDS.some((f) => u[f]) : u[EMAIL_PREF_FIELD[parsed.kind]];
   return { kind: parsed.kind, id: parsed.id, projectName: null, receiving, email: u.email, userName: u.name, locale: u.locale };
 }
 
@@ -72,9 +71,13 @@ export async function applyUnsubscribe(token: string, via: "one-click" | "page",
         data: unsubscribed,
       });
     }
-  } else if (target.kind === "note") {
-    // Solo si aún las recibe (receiving se calculó con el valor de entonces); «No» por escrito, aunque viniera de serie.
-    const r = target.receiving ? await db.user.updateMany({ where: { id: target.id, email: target.email, OR: [{ noteMentionEmail: null }, { noteMentionEmail: { not: "OFF" } }] }, data: { noteMentionEmail: "OFF" } }) : { count: 0 };
+  } else if (target.kind === "digest") {
+    // Apagar el resumen no puede pasar los emails a «Al momento» (la frecuencia sigue como está): se desmarcan las casillas
+    // de los emails sobre proyectos, que son lo que trae. Los de administración no cambian.
+    const r = await db.user.updateMany({
+      where: { id: target.id, email: target.email, OR: PROJECT_EMAIL_FIELDS.map((f) => ({ [f]: true })) },
+      data: Object.fromEntries(PROJECT_EMAIL_FIELDS.map((f) => [f, false])),
+    });
     changed = r.count > 0;
   } else {
     const field = EMAIL_PREF_FIELD[target.kind];

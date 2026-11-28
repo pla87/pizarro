@@ -41,7 +41,7 @@ describe("aviso a los administradores: un proyecto privado pasa a ser de equipo 
       const off = await makeUser({ role: "ADMIN", active: false });
       const plain = await makeUser();
       await db.user.update({ where: { id: en.id }, data: { locale: "EN" } });
-      await db.user.update({ where: { id: noMail.id }, data: { notifyEmail: false } });
+      await db.user.update({ where: { id: noMail.id }, data: { notifyAdminEmail: false } });
       const u = await makeUser({ name: "Lucía Baja" });
       await db.user.update({ where: { id: u.id }, data: { passwordHash: hash } });
       const a = await makeProject({ visibility: "PRIVATE", owner: u });

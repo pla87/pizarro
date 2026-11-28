@@ -98,49 +98,45 @@ describe("notas: avisos de mención", () => {
     assert.equal(await unreadCount(bea.id, "MEMBER"), 0);
   });
 
-  test("email: «Al momento» lo envía, «En el resumen diario» lo deja para el resumen y «No», nada", async () => {
+  test("email: «Al momento» lo envía, «Resumen diario» lo deja para el resumen y con las menciones o la casilla principal apagadas, nada", async () => {
     const author = await makeUser({ name: "Autora Email" });
     const now_ = await makeUser({ name: "Inmediata Email" });
     const digest = await makeUser({ name: "Resumen Email" });
     const off = await makeUser({ name: "Nada Email" });
-    const byDefault = await makeUser({ name: "Serie Email" });
-    const f = await makeProject({ members: [author, now_, digest, off, byDefault] });
-    // Lo elige cada una en Mi perfil → Avisos; «Serie» no lo elige y tiene el resumen activado (va al resumen).
-    const prefs = { notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, digestHour: 8 };
-    await asUser(now_, async () => expectOk(await updateEmailPrefs({ ...prefs, dailyDigest: true, noteMentionEmail: "NOW" })));
-    await asUser(digest, async () => expectOk(await updateEmailPrefs({ ...prefs, dailyDigest: true, noteMentionEmail: "DIGEST" })));
-    await asUser(off, async () => expectOk(await updateEmailPrefs({ ...prefs, dailyDigest: true, noteMentionEmail: "OFF" })));
-    await asUser(byDefault, async () => expectOk(await updateEmailPrefs({ ...prefs, dailyDigest: true })));
-    assert.deepEqual((await db.user.findMany({ where: { id: { in: [now_.id, byDefault.id] } }, orderBy: { name: "asc" }, select: { noteMentionEmail: true } })).map((u) => u.noteMentionEmail), ["NOW", null]);
+    const master = await makeUser({ name: "Principal Email" });
+    const f = await makeProject({ members: [author, now_, digest, off, master] });
+    // Lo elige cada una en Mi perfil → Avisos (Menciones en tareas y notas + frecuencia).
+    const prefs = { emailNotices: true, notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, digestHour: 8 };
+    await asUser(now_, async () => expectOk(await updateEmailPrefs({ ...prefs, dailyDigest: false })));
+    await asUser(digest, async () => expectOk(await updateEmailPrefs({ ...prefs, dailyDigest: true })));
+    await asUser(off, async () => expectOk(await updateEmailPrefs({ ...prefs, notifyEmail: false, dailyDigest: false })));
+    await asUser(master, async () => expectOk(await updateEmailPrefs({ ...prefs, emailNotices: false, dailyDigest: false })));
 
     const note = await asUser(author, async () => expectOk(await createNote(f.project.id)));
     const mails = await withOutbox(async () => {
-      await save(author, note.id, `Reunión del lunes\n\nAvisad: ${at(now_)} ${at(digest)} ${at(off)} ${at(byDefault)}`);
+      await save(author, note.id, `Reunión del lunes\n\nAvisad: ${at(now_)} ${at(digest)} ${at(off)} ${at(master)}`);
     });
     // En la campana, las cuatro.
     assert.equal((await noticesOf(note.id)).length, 4);
-    // Por email al momento, solo la que lo eligió: «te ha mencionado en la nota», con enlace a la nota y su baja propia.
+    // Por email al momento, solo la de «Al momento» con las menciones marcadas: «te ha mencionado en la nota», con enlace a la nota y la baja de las menciones.
     assert.equal(mails.length, 1);
     assert.equal(mails[0]!.subject, "Autora Email te ha mencionado en la nota «Reunión del lunes»");
     assert.ok(mails[0]!.text.includes(`/p/${f.project.id}/docs?doc=${note.id}`), mails[0]!.text);
     assert.ok(mails[0]!.text.includes("Abrir la nota"));
     assert.ok(mails[0]!.text.includes("Autora Email ha escrito:"));
-    assert.ok(mails[0]!.text.includes(`/unsubscribe/${unsubscribeToken("note", now_.id, (await db.user.findUniqueOrThrow({ where: { id: now_.id } })).email)}`));
+    assert.ok(mails[0]!.text.includes(`/unsubscribe/${unsubscribeToken("mention", now_.id, (await db.user.findUniqueOrThrow({ where: { id: now_.id } })).email)}`));
     const sent = await db.notification.findMany({ where: { documentId: note.id, emailSentAt: { not: null } }, select: { userId: true } });
     assert.deepEqual(sent.map((s) => s.userId), [now_.id]);
 
-    // El resumen diario: las de «En el resumen diario» (también la que no lo eligió y tiene el resumen); las demás, no.
+    // El resumen diario trae las menciones en notas de quien las tiene marcadas (con cualquier frecuencia; solo se envía a quien lo eligió).
     const nowDate = new Date();
     const today = nowDate.toISOString().slice(0, 10);
     const digestOf = async (u: { id: string }) => {
-      const row = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { id: true, role: true, noteMentionEmail: true, notifyEmail: true } });
+      const row = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { id: true, role: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true } });
       return gatherDigest(row, nowDate, today);
     };
-    for (const u of [digest, byDefault]) {
-      const d = await digestOf(u);
-      assert.deepEqual(d.notes?.map((i) => [i.docId, i.title, i.projectId]), [[note.id, "Reunión del lunes", f.project.id]]);
-    }
-    for (const u of [now_, off]) assert.deepEqual((await digestOf(u)).notes, []);
+    assert.deepEqual((await digestOf(digest)).notes?.map((i) => [i.docId, i.title, i.projectId]), [[note.id, "Reunión del lunes", f.project.id]]);
+    assert.deepEqual((await digestOf(off)).notes, []);
     // Y en el correo del resumen, con su apartado y el enlace a la nota.
     const built = buildDigest(await digestOf(digest));
     assert.equal(built.empty, false);
@@ -152,15 +148,15 @@ describe("notas: avisos de mención", () => {
     assert.deepEqual((await digestOf(digest)).notes, []);
   });
 
-  test("la baja del email de menciones en notas pone la opción en «No» (y no toca las menciones en tareas)", async () => {
+  test("la baja de un email de menciones en notas enviado por la v1.77 («n») apaga «Menciones en tareas y notas»", async () => {
     const u = await makeUser({ name: "Baja Email Notas" });
     const row = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { email: true } });
     const token = unsubscribeToken("note", u.id, row.email);
     assert.equal((await resolveUnsubscribe(token))?.receiving, true);
     const res = await applyUnsubscribe(token, "page", "127.0.0.1");
     assert.equal(res?.changed, true);
-    const after = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { noteMentionEmail: true, notifyEmail: true } });
-    assert.deepEqual(after, { noteMentionEmail: "OFF", notifyEmail: true });
+    const after = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { notifyEmail: true, notifyAdminEmail: true, dailyDigest: true } });
+    assert.deepEqual(after, { notifyEmail: false, notifyAdminEmail: true, dailyDigest: false });
     assert.equal((await resolveUnsubscribe(token))?.receiving, false);
     assert.equal((await applyUnsubscribe(token, "one-click", "127.0.0.1"))?.changed, false);
   });

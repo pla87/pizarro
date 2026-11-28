@@ -141,4 +141,21 @@ export const colaboracion: Record<string, string> = {
   "Grupos de mis tareas": "My task groups",
   // Ronda 71: avisos
   "Esa tarea ya no existe.": "That task no longer exists.",
+  // Mi perfil → Avisos → Avisos por email simplificado (v1.79)
+  "Notificaciones por email": "Email notifications",
+  "Recibir avisos por email": "Receive email notifications",
+  "Emails de administración de Pizarro": "Pizarro administration emails",
+  "Avisos de administración": "Administration notices",
+  "Pocos y urgentes: salen siempre al momento.": "Few and urgent: always sent right away.",
+  "Emails sobre proyectos": "Emails about projects",
+  "Menciones en tareas y notas": "Mentions in tasks and notes",
+  "Cuando me asignan una tarea": "When I'm assigned a task",
+  "Cambios de fecha límite y recordatorios": "Due date changes and reminders",
+  "Frecuencia de los emails": "Email frequency",
+  "Resumen diario": "Daily digest",
+  "a las": "at",
+  "los emails de menciones en tareas y notas": "emails about mentions in tasks and notes",
+  "los emails de administración de Pizarro": "Pizarro administration emails",
+  "los emails sobre proyectos del resumen diario": "the project emails of the daily digest",
+  "Te han mencionado en tareas": "You were mentioned in tasks",
 };
