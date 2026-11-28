@@ -62,8 +62,12 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
 export async function deleteTemplate(templateId: string) {
   return runAction({ name: "templates.deleteTemplate", args: [templateId] }, async () => {
     await requireAdmin();
-    const { count } = await db.projectTemplate.deleteMany({ where: { id: v.id.parse(templateId) } });
+    const id = v.id.parse(templateId);
+    // El nombre se lee antes de borrar, para dejarlo en Logs.
+    const before = await db.projectTemplate.findUnique({ where: { id }, select: { name: true } });
+    const { count } = await db.projectTemplate.deleteMany({ where: { id } });
     if (!count) throw notFound();
+    describeAction("Borró la plantilla de proyecto «{name}»", { name: before?.name ?? "" });
     revalidatePath("/admin/templates");
   });
 }
@@ -72,7 +76,10 @@ export async function deleteTemplate(templateId: string) {
 export async function resetTemplate(templateId: string) {
   return runAction({ name: "templates.resetTemplate", args: [templateId] }, async () => {
     await requireAdmin();
-    if (!(await resetBuiltinTemplate(db, v.id.parse(templateId)))) throw notFound();
+    const id = v.id.parse(templateId);
+    const before = await db.projectTemplate.findUnique({ where: { id }, select: { name: true } });
+    if (!(await resetBuiltinTemplate(db, id))) throw notFound();
+    describeAction("Restableció la plantilla de proyecto «{name}»", { name: before?.name ?? "" });
     revalidatePath("/admin/templates");
   });
 }
@@ -92,6 +99,7 @@ export async function restoreDefaultTemplates() {
       const t = await getT();
       throw new AppError(t("Máximo {n} plantillas.", { n: MAX_TEMPLATES }));
     }
+    describeAction("Recuperó las plantillas de serie borradas: {n}", { n: res.restored });
     revalidatePath("/admin/templates");
     return res;
   });

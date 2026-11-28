@@ -341,4 +341,6 @@ export const server: Record<string, string> = {
   // Ronda 70: etiquetas desde el detalle (cambio en lugar de lista entera).
   "Etiquetas: o la lista entera o los cambios, no las dos cosas.": "Labels: send either the whole list or the changes, not both.",
   "Una tarea no puede tener tantas etiquetas.": "A task can't have that many labels.",
+  // Logs de crear un documento de Google desde la tarea
+  "Creó el documento de Google «{title}» en «{task}»": "Created the Google document “{title}” in “{task}”",
 };

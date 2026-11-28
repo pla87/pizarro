@@ -7,9 +7,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { asUser, db, expectFail, expectOk, loginAs, makeProject, makeUser, NOT_FOUND } from "./helpers";
-import { createNote, deleteDocument, deleteDocumentForever, getNote, renameDocument, restoreDocument, saveNote, searchNotes, setDocumentPinned } from "../../src/actions/documents";
+import { createNote, deleteDocument, discardEmptyNote, deleteDocumentForever, getNote, renameDocument, restoreDocument, saveNote, searchNotes, setDocumentPinned } from "../../src/actions/documents";
 import { DOCUMENTS_MAX_PER_PROJECT, NOTE_MAX_CHARS } from "../../src/lib/document-kind";
-import { listProjectDocumentsOf, listTrashedDocumentsOf, purgeTrashedDocuments } from "../../src/lib/documents";
+import { listProjectDocumentsOf, noteGrowthNeedsQuotaCheck, NOTE_QUOTA_STEP_BYTES, listTrashedDocumentsOf, purgeTrashedDocuments } from "../../src/lib/documents";
 import { storageUsage } from "../../src/lib/storage-usage";
 import { saveDocumentFile } from "../../src/lib/uploads";
 import { flushLogs } from "../../src/lib/log";
@@ -121,16 +121,19 @@ describe("notas: crear y guardar", () => {
     assert.equal((await doc(note.id)).noteVersion, 0);
     assert.equal(expectOk(await saveNote(note.id, "x".repeat(NOTE_MAX_CHARS), 0)).status, "saved");
 
-    // Cuota: con el proyecto casi lleno la nota no puede crecer más de lo que queda, pero sí acortarse.
+    // Cuota: con el proyecto casi lleno la nota no puede crecer más de lo que queda, pero sí acortarse. La cuota se
+    // comprueba al cruzar cada 64 KB (no en cada autoguardado: noteGrowthNeedsQuotaCheck).
     const q = await makeProject({ members: [m] });
     const small = expectOk(await createNote(q.project.id));
-    await db.projectDocument.create({ data: { projectId: q.project.id, name: "grande.bin", mimeType: "application/octet-stream", size: 1 * MB - 100, kind: "OTHER", createdById: m.id } });
+    const KB = 1024;
+    await db.projectDocument.create({ data: { projectId: q.project.id, name: "grande.bin", mimeType: "application/octet-stream", size: 1 * MB - 70 * KB, kind: "OTHER", createdById: m.id } });
     await withQuota(1, async () => {
-      assert.equal(expectOk(await saveNote(small.id, "a".repeat(80), 0)).status, "saved");
-      expectFail(await saveNote(small.id, "a".repeat(200), 1), /[Cc]uota/);
-      assert.equal((await doc(small.id)).noteContent, "a".repeat(80));
+      // Un crecimiento pequeño no cruza ningún múltiplo de 64 KB: se guarda sin comprobar.
+      assert.equal(expectOk(await saveNote(small.id, "a".repeat(30 * KB), 0)).status, "saved");
+      expectFail(await saveNote(small.id, "a".repeat(100 * KB), 1), /[Cc]uota/);
+      assert.equal((await doc(small.id)).noteContent, "a".repeat(30 * KB));
       // Lo que ya ocupaba cuenta: crecer hasta el límite sí cabe, y acortar siempre.
-      assert.equal(expectOk(await saveNote(small.id, "a".repeat(100), 1)).status, "saved");
+      assert.equal(expectOk(await saveNote(small.id, "a".repeat(70 * KB), 1)).status, "saved");
       assert.equal(expectOk(await saveNote(small.id, "corta", 2)).status, "saved");
       // «Nueva nota» con la cuota llena: se crea vacía (0 bytes), como cabe.
       expectOk(await createNote(q.project.id));
@@ -140,6 +143,46 @@ describe("notas: crear y guardar", () => {
     const g = await makeProject({ members: [m] });
     await db.projectDocument.createMany({ data: Array.from({ length: DOCUMENTS_MAX_PER_PROJECT }, () => ({ projectId: g.project.id, name: "n.txt", mimeType: "text/plain", size: 1, kind: "TEXT" as const, createdById: m.id })) });
     expectFail(await createNote(g.project.id), /máximo de 200 archivos/);
+  });
+
+  test("noteGrowthNeedsQuotaCheck: solo al cruzar un múltiplo de 64 KB o con un salto grande; acortar nunca", () => {
+    assert.equal(noteGrowthNeedsQuotaCheck(0, 100), false);
+    assert.equal(noteGrowthNeedsQuotaCheck(1000, 1100), false);
+    assert.equal(noteGrowthNeedsQuotaCheck(65500, 65600), true);
+    assert.equal(noteGrowthNeedsQuotaCheck(65536, 65600), false);
+    assert.equal(noteGrowthNeedsQuotaCheck(10, 10 + NOTE_QUOTA_STEP_BYTES), true);
+    assert.equal(noteGrowthNeedsQuotaCheck(100000, 5), false);
+    assert.equal(noteGrowthNeedsQuotaCheck(5, 5), false);
+  });
+
+  test("cerrar «Nueva nota» sin escribir: se descarta la vacía; una con texto, renombrada, fijada o de otra persona no", async () => {
+    const m = await makeUser();
+    const other = await makeUser();
+    const f = await makeProject({ members: [m, other] });
+    await loginAs(m);
+    const empty = expectOk(await createNote(f.project.id));
+    // Otra persona del proyecto no la descarta (la creó yo).
+    await loginAs(other);
+    assert.deepEqual(expectOk(await discardEmptyNote(empty.id)), { discarded: false });
+    await loginAs(m);
+    assert.deepEqual(expectOk(await discardEmptyNote(empty.id)), { discarded: true });
+    assert.equal(await db.projectDocument.count({ where: { id: empty.id } }), 0);
+    // Ya no existe: error de no encontrado, sin más.
+    expectFail(await discardEmptyNote(empty.id), NOT_FOUND);
+
+    const written = expectOk(await createNote(f.project.id));
+    expectOk(await saveNote(written.id, "algo", 0));
+    assert.deepEqual(expectOk(await discardEmptyNote(written.id)), { discarded: false });
+    const renamed = expectOk(await createNote(f.project.id));
+    expectOk(await renameDocument(renamed.id, "Mi nota"));
+    assert.deepEqual(expectOk(await discardEmptyNote(renamed.id)), { discarded: false });
+    const pinned = expectOk(await createNote(f.project.id));
+    expectOk(await setDocumentPinned(pinned.id, true));
+    assert.deepEqual(expectOk(await discardEmptyNote(pinned.id)), { discarded: false });
+    // Un documento subido (no es nota) tampoco.
+    const file = await db.projectDocument.create({ data: { projectId: f.project.id, name: "a.txt", mimeType: "text/plain", size: 1, kind: "TEXT", createdById: m.id } });
+    expectFail(await discardEmptyNote(file.id), NOT_FOUND);
+    for (const id of [written.id, renamed.id, pinned.id, file.id]) assert.equal(await db.projectDocument.count({ where: { id } }), 1);
   });
 
   test("un ajeno no puede crear, leer, guardar, fijar ni buscar", async () => {
@@ -182,6 +225,9 @@ describe("notas: descarga, papelera y búsqueda", () => {
     const head = await fileHead(new Request(`http://localhost/api/documents/${note.id}`, { method: "HEAD" }), { params: Promise.resolve({ documentId: note.id }) });
     assert.equal(head.status, 200);
     assert.equal(await head.text(), "");
+    // HEAD (que no lee el texto) da el mismo ETag y el mismo tamaño que GET, también con caracteres de varios bytes.
+    assert.equal(head.headers.get("etag"), etag);
+    assert.equal(head.headers.get("content-length"), String(Buffer.byteLength("Hola ñ")));
     expectOk(await saveNote(note.id, "Hola ñ y más", 1));
     assert.equal((await fetchDoc(note.id, "", { "if-none-match": etag })).status, 200);
   });

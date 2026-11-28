@@ -489,6 +489,7 @@ export function DocsManager({ projectId, projectName, documents: listed, trashed
         <DocViewer
           key={open.id} doc={open} docs={documents} fromLink={open.id === initialOpenId} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode}
           users={users} fileMaxMb={fileMaxMb} isNew={open.id === freshId} onPin={() => void togglePin(open)} pinBusy={busyId === open.id} onClose={() => { setOpenId(null); setFreshId(null); }}
+          onDiscarded={(id) => { setCreated((c) => (c?.id === id ? null : c)); safeRefresh(); }}
         />
       )}
       {openTrashed && showTrash && (
@@ -502,9 +503,9 @@ export function DocsManager({ projectId, projectName, documents: listed, trashed
  * Visor en un modal: imagen, PDF del visor del navegador, texto plano, Markdown o HTML (aislado); el resto solo se descarga.
  * Una nota se ve y se edita aquí mismo (NoteEditor); `isNew`: recién creada, se abre ya en modo edición.
  */
-function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, users, fileMaxMb, isNew, onPin, pinBusy, onClose }: {
+function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, users, fileMaxMb, isNew, onPin, pinBusy, onClose, onDiscarded }: {
   doc: DocumentRow; docs: DocumentRow[]; fromLink: boolean; projectId: string; currentUserId: string; editorMode: EditorModeValue;
-  users: UserOption[]; fileMaxMb: number; isNew: boolean; onPin: () => void; pinBusy: boolean; onClose: () => void;
+  users: UserOption[]; fileMaxMb: number; isNew: boolean; onPin: () => void; pinBusy: boolean; onClose: () => void; onDiscarded: (id: string) => void;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -625,7 +626,7 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
               safeRefresh();
             }
           }}
-          onUploaded={safeRefresh} onTrashed={safeRefresh}
+          onUploaded={safeRefresh} onTrashed={safeRefresh} discardIfEmpty={isNew} onDiscarded={() => onDiscarded(doc.id)}
         />
       ) : (
         <DocPreview doc={doc} name={name} src={src} projectId={projectId} docs={docs} fromLink={fromLink} />

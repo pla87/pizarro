@@ -119,6 +119,17 @@ export async function findDocumentWithNoteForUser(user: CurrentUser, documentId:
   });
 }
 
+/** ¿Es una nota escrita en la app (con texto en la base)? Sin traer el texto: solo para la ruta de descarga. */
+export async function isNoteDocument(documentId: string): Promise<boolean> {
+  return (await db.projectDocument.count({ where: { id: documentId, noteContent: { not: null } } })) > 0;
+}
+
+/** Texto y versión de una nota para servirla (la ruta de descarga lo lee solo cuando hay que enviar el cuerpo). */
+export async function readNoteBody(documentId: string): Promise<{ content: string; version: number } | null> {
+  const row = await db.projectDocument.findUnique({ where: { id: documentId }, select: { noteContent: true, noteVersion: true } });
+  return row && row.noteContent !== null ? { content: row.noteContent, version: row.noteVersion } : null;
+}
+
 /** Por qué no cabe un documento: el máximo de documentos del proyecto o una cuota de almacenamiento. */
 export type DocumentLimitProblem = { reason: "count"; limit: number } | { reason: "quota"; quota: QuotaExceeded };
 
@@ -343,10 +354,42 @@ async function autoNoteName(doc: { name: string; noteAutoName: boolean; noteCont
   return next === doc.name ? null : next;
 }
 
+/** Cuánto puede crecer una nota entre dos comprobaciones de cuota (ver noteGrowthNeedsQuotaCheck). */
+export const NOTE_QUOTA_STEP_BYTES = 64 * 1024;
+
+/**
+ * ¿Hay que comprobar la cuota (con el candado común de las subidas y los agregados de uso) al guardar una nota que pasa
+ * de `before` a `after` bytes? Un autoguardado normal crece unos bytes: tomar el candado global y sumar adjuntos,
+ * entregables y documentos en cada pausa de cada escritor serializaba los guardados con las subidas de todos los
+ * proyectos. Se comprueba solo cuando la nota cruza un múltiplo de 64 KB (o salta de golpe más de 64 KB, un pegado
+ * grande): entre dos comprobaciones una nota solo puede crecer sin mirar por debajo de 64 KB, así que el exceso posible
+ * sobre la cuota es de menos de 64 KB por nota (y una nota está limitada a 200.000 caracteres). Acortar nunca comprueba.
+ */
+export function noteGrowthNeedsQuotaCheck(before: number, after: number): boolean {
+  if (after <= before) return false;
+  return after - before >= NOTE_QUOTA_STEP_BYTES || Math.floor(after / NOTE_QUOTA_STEP_BYTES) > Math.floor(before / NOTE_QUOTA_STEP_BYTES);
+}
+
+/**
+ * Descarta una nota recién creada con «Nueva nota» que se cerró sin escribir nada: sigue vacía, sin guardar nunca
+ * (versión 0), con el nombre por defecto, sin fijar, en vivo y creada por esta persona. Todo se comprueba en el propio
+ * DELETE, así que una nota que alguien guardó entretanto no se toca. Devuelve el nombre si la borró, o null.
+ */
+export async function discardEmptyNoteRow(user: CurrentUser, documentId: string): Promise<{ id: string; name: string; projectId: string } | null> {
+  const doc = await findDocumentWithNoteForUser(user, documentId);
+  if (!doc || doc.noteContent === null) throw notFound();
+  noteProject(doc.projectId);
+  if (doc.deletedAt || doc.pinnedAt || !doc.noteAutoName || !isDefaultNoteName(doc.name)) return null;
+  const { count } = await db.projectDocument.deleteMany({
+    where: { id: doc.id, createdById: user.id, deletedAt: null, pinnedAt: null, noteContent: "", noteVersion: 0, size: 0, noteAutoName: true, name: doc.name },
+  });
+  return count ? { id: doc.id, name: doc.name, projectId: doc.projectId } : null;
+}
+
 /**
  * Guarda el texto de una nota si sigue en la versión `baseVersion` que conocía quien escribe; si no, no toca nada y
  * devuelve la versión de la otra persona (para elegir). Si el texto crece, comprueba la cuota con el candado común de las
- * subidas (solo lo que crece: los bytes de antes ya cuentan). Una nota en la papelera no se guarda. Mientras nadie la
+ * subidas (solo lo que crece: los bytes de antes ya cuentan; no en cada autoguardado, ver noteGrowthNeedsQuotaCheck). Una nota en la papelera no se guarda. Mientras nadie la
  * haya renombrado, toma el nombre de su primera línea (autoNoteName). Las menciones nuevas respecto al texto anterior
  * avisan a esas personas (notifyNoteMentions).
  */
@@ -365,7 +408,7 @@ export async function saveNoteRow(user: CurrentUser, documentId: string, content
   const size = noteBytes(content);
   const name = await autoNoteName(doc, content);
   const res = await db.$transaction(async (tx) => {
-    if (size > doc.size) {
+    if (noteGrowthNeedsQuotaCheck(doc.size, size)) {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
       const quota = await quotaExceededFor(doc.projectId, size - doc.size, tx);
       if (quota) return { saved: false as const, renamed: false, quota };

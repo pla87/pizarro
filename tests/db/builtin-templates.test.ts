@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { flushLogs } from "../../src/lib/log";
 import { createProject } from "../../src/actions/projects";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
 import { applyTemplateChange } from "../../src/actions/template-apply";
@@ -59,6 +60,12 @@ describe("plantillas de proyecto de serie", () => {
     const back = (await listTemplatesSorted(db)).find((t) => t.id === vibe.id)!;
     assert.equal(back.name, "Vibecoding");
     assert.equal(back.builtinModified, false);
+    // Borrar, restablecer y recuperar dejan rastro legible en Logs (no «OK»).
+    await flushLogs();
+    const msg = async (action: string) => (await db.appLog.findFirstOrThrow({ where: { action }, orderBy: { createdAt: "desc" } })).message;
+    assert.match(await msg("templates.deleteTemplate"), /plantilla de proyecto «.+»/);
+    assert.match(await msg("templates.resetTemplate"), /Restableció la plantilla de proyecto «Mi vibecoding»/);
+    assert.match(await msg("templates.restoreDefaultTemplates"), /Recuperó las plantillas de serie borradas: \d+/);
   });
 
   test("las de serie sin tocar se actualizan solas a la nueva definición; las modificadas se respetan", async () => {

@@ -38,7 +38,7 @@ const deploySchema = z.object({
   projectId: v.id,
   title: v.title,
   content: z.string().min(1, "El contenido está vacío.").max(MAX_RELEASE_CONTENT, "El contenido es demasiado largo."),
-  taskIds: releaseTaskIds,
+  taskIds: releaseTaskIds.min(1, "Elige alguna tarea para la release."),
   destination: z.enum(["IN_PRODUCTION", "ARCHIVE"]),
   /** Tareas con adjuntos y su código en el texto (F1, C2…), en el orden del diálogo. */
   attachments: z.array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) })).max(RELEASE_MAX_ATTACHMENT_TASKS, "Una release admite como mucho 200 tareas con adjuntos: quita alguna de la selección.").optional(),
@@ -376,7 +376,7 @@ export async function deleteReleaseAttachments(releaseId: string) {
   return runAction({ name: "releases.deleteReleaseAttachments", args: [releaseId] }, async () => {
     const user = await requireUser();
     const { releaseId: id } = releaseIdSchema.parse({ releaseId });
-    await loadAccessibleRelease(user, id);
+    const release = await loadAccessibleRelease(user, id);
     const ids = await db.$transaction(async (tx) => {
       // El UPDATE bloquea la fila de la release aunque el pendiente ya fuera null.
       await tx.release.updateMany({ where: { id }, data: { attachmentsPending: Prisma.DbNull } });
@@ -385,6 +385,7 @@ export async function deleteReleaseAttachments(releaseId: string) {
       return rows.map((a) => a.id);
     });
     await removeReleaseAttachmentFiles(ids);
+    describeAction("Quitó los adjuntos copiados de la release «{title}»: {n}", { title: release.title, n: ids.length }, { releaseId: id });
     return { id };
   });
 }

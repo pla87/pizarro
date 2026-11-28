@@ -291,6 +291,26 @@ describe("deployRelease: tarea archivada mientras se despliega", () => {
   });
 });
 
+describe("updateTask: tarea archivada mientras se edita", () => {
+  test("si otra persona la archiva entre la comprobación y la escritura, error claro y no se modifica", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f, { title: "Original" });
+    await loginAs(user);
+    let pending: ReturnType<typeof updateTask> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id" = ${task.id} FOR UPDATE`;
+      pending = updateTask(task.id, { title: "Editada" });
+      await waitForLockWaiter();
+      await tx.task.update({ where: { id: task.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo } });
+    }, { timeout: 10_000 });
+    expectFail(await pending!, /archivada/);
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.equal(row.title, "Original");
+    assert.ok(row.archivedAt);
+  });
+});
+
 describe("setGeneralKindEnabled: ocultar a la vez los dos últimos tipos", () => {
   test("solo se oculta uno: el proyecto nunca queda sin tipos", async () => {
     const user = await makeUser();
