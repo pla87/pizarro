@@ -89,7 +89,7 @@ function projectNoticeMessage(n: { type: NotificationKind; excerpt: string; proj
 }
 
 /** Casillas de email de una persona que decide emailWanted (Mi perfil → Avisos → Notificaciones por email). */
-export type EmailPrefs = {
+type EmailPrefs = {
   /** Casilla principal: apagada, no sale ningún email de avisos. */
   emailNotices: boolean;
   notifyEmail: boolean;

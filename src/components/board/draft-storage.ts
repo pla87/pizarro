@@ -41,7 +41,7 @@ export function writeDraft(key: string, value: unknown): void {
 }
 
 /** Borradores locales de las notas de Documentación (por persona y nota; los usa NoteEditor). */
-export const NOTE_DRAFT_PREFIX = "pz-draft-note:";
+const NOTE_DRAFT_PREFIX = "pz-draft-note:";
 export const noteDraftKey = (userId: string, docId: string) => `${NOTE_DRAFT_PREFIX}${userId}:${docId}`;
 
 /**

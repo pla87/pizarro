@@ -112,7 +112,7 @@ export async function findDocumentForUser(user: CurrentUser, documentId: string)
  * Como findDocumentForUser, con el texto de la nota (`noteContent`; null si es un documento subido). Aparte para que
  * renombrar, fijar o mandar a la papelera no lean hasta 200.000 caracteres: solo la ruta del documento y las notas.
  */
-export async function findDocumentWithNoteForUser(user: CurrentUser, documentId: string) {
+async function findDocumentWithNoteForUser(user: CurrentUser, documentId: string) {
   return db.projectDocument.findFirst({
     where: { id: documentId, project: visibleProjectsWhere(user) },
     select: { id: true, name: true, mimeType: true, size: true, kind: true, projectId: true, deletedAt: true, noteContent: true, noteVersion: true, pinnedAt: true, noteAutoName: true },
