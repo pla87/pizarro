@@ -24,9 +24,9 @@ import {
 export const CHALLENGE_COOKIE = "pz_2fa";
 export const CHALLENGE_TTL_MS = 10 * 60_000;
 /** El alta del segundo paso (SETUP) deja tiempo para instalar una app de autenticación y volver (sobre todo en el móvil). */
-export const SETUP_CHALLENGE_TTL_MS = 30 * 60_000;
+const SETUP_CHALLENGE_TTL_MS = 30 * 60_000;
 /** Cuánto vale un desafío de acceso según su tipo. */
-export function challengeTtlMs(kind: "LOGIN" | "SETUP"): number {
+function challengeTtlMs(kind: "LOGIN" | "SETUP"): number {
   return kind === "SETUP" ? SETUP_CHALLENGE_TTL_MS : CHALLENGE_TTL_MS;
 }
 /** Fallos permitidos por cada contraseña correcta, y por persona y hora. */

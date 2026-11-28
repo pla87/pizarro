@@ -6,7 +6,7 @@ import { currentPushSubscription, keyBytes, pushSupport, pushWorkerReady, rememb
 // Si el servidor ya no tiene el dispositivo (se quitó desde otro sitio) NO se vuelve a activar: solo se olvida la huella.
 
 /** Lo que la resincronización pide al servidor (las acciones de servidor; en las pruebas, falsas). */
-export interface ResyncDeps {
+interface ResyncDeps {
   pushSetup: () => Promise<{ ok: true; data: { publicKey: string; devices: { hash: string }[] } } | { ok: false }>;
   renewPush: (input: { oldHash: string; endpoint: string; keys: { p256dh: string; auth: string } }) => Promise<{ ok: boolean }>;
 }
