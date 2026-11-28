@@ -8,11 +8,6 @@ export const colaboracion: Record<string, string> = {
   "{actor} te ha mencionado en {task}": "{actor} mentioned you in {task}",
   "Marcar como leído": "Mark as read",
   "Aquí aparecerán las menciones, asignaciones, cambios de fecha y comentarios que te afecten.": "Mentions, assignments, due date changes and comments that concern you will show up here.",
-  "Email cuando me asignan una tarea": "Email when a task is assigned to me",
-  "Email con los comentarios y respuestas en tareas que sigo": "Email with comments and replies on tasks I follow",
-  "Resumen diario por email": "Daily summary by email",
-  "Lo ocurrido en 24 horas en tus proyectos y lo que te toca hoy. Sin novedades, no se envía.": "What happened in your projects in the last 24 hours and what is due today. Not sent if there is nothing new.",
-  "Enviar a las": "Send at",
   // Seguimiento, historial y respuestas
   "Seguir": "Follow",
   "Dejar de seguir": "Unfollow",
@@ -91,14 +86,11 @@ export const colaboracion: Record<string, string> = {
   "Para que vuelva a salir, haz el informe más corto: deja menos tareas pendientes (borra o termina las que ya no hagan falta) o archiva las tareas cerradas. El próximo informe se intentará el día y a la hora de siempre.": "To get it sent again, make the report shorter: leave fewer pending tasks (delete or finish the ones no longer needed) or archive the closed tasks. The next report will be attempted on the usual day and time.",
   "Si necesitas el informe tal como está, pide a un administrador que dé más memoria al generador de PDF (PDF_WORKER_MAX_MB).": "If you need the report as it is, ask an administrator to give the PDF generator more memory (PDF_WORKER_MAX_MB).",
   // Avisos por email: recordatorios de «Esperando» con las fechas límite, citas y baja en un clic
-  "Email con los cambios de fecha límite y los recordatorios de «Esperando»": "Email with due date changes and “Waiting” reminders",
   "{name} ha escrito:": "{name} wrote:",
   "Dejar de recibir estos emails": "Stop receiving these emails",
-  "los avisos por email de menciones": "mention notifications by email",
   "los emails de las tareas que te asignan": "emails about tasks assigned to you",
   "los emails de cambios de fecha límite y recordatorios de «Esperando»": "emails about due date changes and “Waiting” reminders",
   "los emails de comentarios y respuestas en tareas que sigues": "emails about comments and replies on tasks you follow",
-  "el resumen diario por email": "the daily summary by email",
   "el informe semanal del proyecto «{project}»": "the weekly report for the project “{project}”",
   "Este enlace para dejar de recibir emails no es válido o ya no sirve (por ejemplo, porque ha cambiado la dirección de destino).": "This link to stop receiving emails is invalid or no longer works (for example, because the destination address has changed).",
   "Puedes volver a activarlo en «Mi perfil → Avisos».": "You can turn it back on in “My profile → Notifications”.",
@@ -107,8 +99,6 @@ export const colaboracion: Record<string, string> = {
   "Darme de baja": "Unsubscribe",
   "Hecho: ya no recibirás {what}.": "Done: you'll no longer receive {what}.",
   // Mi perfil → Avisos: una sola tarjeta «Avisos por email»
-  "Menciones, asignaciones, cambios de fecha y comentarios de lo que sigues salen siempre en la campana; además, por email:": "Mentions, assignments, due date changes and comments on what you follow always show in the bell; also by email:",
-  "Email cuando me mencionan": "Email when I'm mentioned",
   // Baja del informe semanal recordada y avisada
   "{name} se dio de baja de este informe: solo esa persona puede volver a activarlo para sí misma. Elige a otra.": "{name} unsubscribed from this report: only they can turn it back on for themselves. Choose someone else.",
   "Esa dirección se dio de baja de este informe: no se le puede volver a enviar. Elige otra.": "That address unsubscribed from this report: it can't be sent there again. Choose another one.",
@@ -120,11 +110,6 @@ export const colaboracion: Record<string, string> = {
   "{actor} se ha dado de baja del informe semanal de {task}": "{actor} unsubscribed from the weekly report of {task}",
   "El informe ya no se envía. Solo esa persona puede volver a activarlo para sí misma; puedes elegir otro destinatario en Ajustes del proyecto → Informes.": "The report is no longer sent. Only they can turn it back on for themselves; you can choose another recipient in Project settings → Reports.",
   "Abrir los informes del proyecto": "Open the project's reports",
-  // Avisos por email: qué más llega con «Email cuando me mencionan» y aviso destacado si el servidor no envía emails
-  "Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste.":
-    "Besides mentions, this option also emails you when someone unsubscribes from a weekly report you set up.",
-  "Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste y, como administrador, el de que un proyecto privado ha pasado a ser de equipo al borrarse una cuenta.":
-    "Besides mentions, this option also emails you when someone unsubscribes from a weekly report you set up and, as an admin, when a private project becomes a team project because an account was deleted.",
   "El envío de emails aún no está configurado en el servidor: de momento no se envía ningún email. Lo que marques aquí se guarda y valdrá cuando se configure.":
     "Email sending is not configured on the server yet: no emails are sent for now. What you check here is saved and will apply once it is configured.",
   "Configurar el email": "Set up email",
@@ -141,4 +126,27 @@ export const colaboracion: Record<string, string> = {
   "Grupos de mis tareas": "My task groups",
   // Ronda 71: avisos
   "Esa tarea ya no existe.": "That task no longer exists.",
+  // Mi perfil → Avisos → Avisos por email simplificado (v1.79)
+  "Notificaciones por email": "Email notifications",
+  "Recibir avisos por email": "Receive email notifications",
+  "Emails de administración de Pizarro": "Pizarro administration emails",
+  "Avisos de administración": "Administration notices",
+  "Pocos y urgentes: salen siempre al momento.": "Few and urgent: always sent right away.",
+  "Emails sobre proyectos": "Emails about projects",
+  "Menciones en tareas y notas": "Mentions in tasks and notes",
+  "Cuando me asignan una tarea": "When I'm assigned a task",
+  "Frecuencia de los emails": "Email frequency",
+  "Resumen diario": "Daily digest",
+  "a las": "at",
+  "los emails de menciones en tareas y notas": "emails about mentions in tasks and notes",
+  "los emails de administración de Pizarro": "Pizarro administration emails",
+  "Te han mencionado en tareas": "You were mentioned in tasks",
+  // Revisión del aviso por email (v1.79, vuelta 2)
+  "el resumen diario y los demás emails sobre proyectos (menciones, asignaciones, fechas y comentarios)": "the daily digest and the other emails about projects (mentions, assignments, dates and comments)",
+  "Dejarás de recibir {what}. Se desmarcan esas casillas en «Mi perfil → Avisos»: tampoco te llegarán al momento. Los emails de administración no cambian.": "You'll stop receiving {what}. Those boxes get unticked in “My profile → Notifications”: they won't arrive right away either. Administration emails won't change.",
+  "{n} avisos": "{n} notices",
+  "Emails importantes de Pizarro": "Important Pizarro emails",
+  "Avisos importantes": "Important notices",
+  "Cuando te añaden a un proyecto o te afecta un cambio de un administrador. Siempre al momento.": "When you're added to a project or an administrator's change affects you. Always sent right away.",
+  "Con el resumen diario y ninguna casilla de emails sobre proyectos marcada, no te llegará ningún resumen.": "With the daily digest and no project email box ticked, you won't receive any digest.",
 };

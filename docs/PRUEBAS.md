@@ -956,3 +956,17 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 5. **Permiso bloqueado** en el navegador: la sección lo explica y el interruptor queda apagado.
 6. **Quitar** un dispositivo desde otro; **Cerrar las demás sesiones** corta los avisos de los otros dispositivos; una **mención en una nota** llega también.
 7. En *Logs*: `notify.push` y `notify.pushExpired`, sin la dirección del dispositivo.
+
+## 24. Novedades de la v1.79.0
+
+### 24.1 Avisos en el dispositivo en el ordenador (Chrome en Windows)
+
+1. *Mi perfil → Avisos → Avisos en este dispositivo*: **marca la casilla** en el ordenador (en tu captura estaba sin marcar: por eso el aviso de prueba llegaba al móvil). Acepta el permiso.
+2. **Probar**: el aviso sale en este ordenador (ya no en el móvil). Si no lo ves: Configuración de Windows → Sistema → Notificaciones → Google Chrome activado, y «No molestar» o «Asistencia de concentración» desactivados.
+3. En el móvil: el icono de la barra de estado es ahora la silueta de Pizarro (no un cuadrado blanco). Para que salga como ventana emergente arriba: Ajustes → Aplicaciones → Pizarro (o Chrome) → Notificaciones → el canal o sitio de Pizarro → importancia alta / «Mostrar como emergente».
+
+### 24.2 Avisos por email (tu cuenta)
+
+1. *Mi perfil → Avisos → Avisos por email*: casilla principal, tu casilla de administración y las cuatro de proyectos con **Frecuencia de los emails**. Comprueba que lo que tenías marcado sigue igual.
+2. Con **Resumen diario**, al día siguiente llega un solo email con lo marcado (y no emails sueltos de proyectos).
+

@@ -22,12 +22,13 @@ export async function generateMetadata() {
 /** Qué deja de llegar, en una frase corta («los emails de…»). */
 function what(target: UnsubscribeTarget, t: T): string {
   switch (target.kind) {
-    case "mention": return t("los avisos por email de menciones");
+    case "mention":
+    case "note": return t("los emails de menciones en tareas y notas");
     case "assigned": return t("los emails de las tareas que te asignan");
     case "due": return t("los emails de cambios de fecha límite y recordatorios de «Esperando»");
     case "comment": return t("los emails de comentarios y respuestas en tareas que sigues");
-    case "note": return t("los emails de menciones en notas de Documentación");
-    case "digest": return t("el resumen diario por email");
+    case "admin": return t("los emails de administración de Pizarro");
+    case "digest": return t("el resumen diario y los demás emails sobre proyectos (menciones, asignaciones, fechas y comentarios)");
     default: return t("el informe semanal del proyecto «{project}»", { project: target.projectName ?? "" });
   }
 }
@@ -64,7 +65,11 @@ export default async function UnsubscribePage({ params }: { params: Promise<{ to
       <div className="space-y-4 text-sm">
         {target.receiving ? (
           <>
-            <p>{t("Dejarás de recibir {what}. Los demás emails no cambian.", { what: what(target, t) })}</p>
+            <p>
+              {target.kind === "digest"
+                ? t("Dejarás de recibir {what}. Se desmarcan esas casillas en «Mi perfil → Avisos»: tampoco te llegarán al momento. Los emails de administración no cambian.", { what: what(target, t) })
+                : t("Dejarás de recibir {what}. Los demás emails no cambian.", { what: what(target, t) })}
+            </p>
             <form method="post" action={`/api/unsubscribe/${encodeURIComponent(token)}`}>
               <input type="hidden" name="confirm" value="1" />
               <button className="btn-primary w-full">{t("Darme de baja")}</button>

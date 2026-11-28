@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarDays, Mail } from "lucide-react";
+import { AlertTriangle, Mail } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { cn } from "@/components/ui/cn";
@@ -8,33 +8,38 @@ import { updateEmailPrefs } from "@/actions/collab-prefs";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
-import { isNoteMentionEmailMode, noteMentionEmailMode, type NoteMentionEmailMode } from "@/lib/note-mention-pref";
 
 type EmailPrefs = {
+  /** Casilla principal: apagada, ningún email de avisos ni resumen. */
+  emailNotices: boolean;
+  /** Emails de administración (siempre al momento). */
+  notifyAdminEmail: boolean;
+  /** Menciones en tareas y notas. */
   notifyEmail: boolean;
   notifyAssignedEmail: boolean;
   notifyDueEmail: boolean;
   notifyCommentEmail: boolean;
+  /** Frecuencia de los emails sobre proyectos: true = resumen diario, false = al momento. */
   dailyDigest: boolean;
   digestHour: number;
-  /** Menciones en notas de Documentación; null = sin elegir (sigue a las demás casillas, noteMentionEmailMode). */
-  noteMentionEmail: NoteMentionEmailMode | null;
 };
 
 interface Props {
   prefs: EmailPrefs;
   emailAvailable: boolean;
-  /** Administrador: con las menciones salen también los avisos de administración. */
+  /** Administrador: la casilla de administración lleva su título completo (los demás la ven como «Avisos importantes») y puede configurar el email. */
   adminNotices: boolean;
   /** Zona horaria de la app (la hora del resumen es de esa zona). */
   timeZone: string;
 }
 
 /**
- * «Avisos por email» de Mi perfil → Avisos: todas las casillas de email (menciones, asignaciones, fechas y «Esperando»,
- * comentarios, resumen diario y su hora) en una sola tarjeta con un solo botón, que lo guarda todo a la vez. Antes iban
- * en dos tarjetas con su propio «Guardar avisos» cada una, y lo marcado en una se perdía al guardar la otra. En la app
- * (la campana) los avisos se crean siempre. Telegram y WhatsApp van en su propia tarjeta (MessagingSection).
+ * «Avisos por email» de Mi perfil → Avisos, como la sección de avisos push: una casilla principal y, solo si está marcada,
+ * sus opciones, con un solo botón que lo guarda todo a la vez. Dos grupos: emails de administración de Pizarro (siempre al
+ * momento; la casilla la ven todos: quien no es administrador también recibe avisos importantes, como que le añadan a un
+ * proyecto, y se llama «Avisos importantes») y emails sobre proyectos (menciones, asignaciones, fechas, comentarios), con su
+ * frecuencia: al momento o en el resumen diario (con su hora). En la app (la campana) los avisos se crean siempre.
+ * Telegram y WhatsApp van en su propia tarjeta (MessagingSection).
  */
 export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZone }: Props) {
   const t = useT();
@@ -44,14 +49,18 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
   // Lo guardado: sin cambios, «Guardar avisos» no haría nada y queda desactivado.
   const [saved, setSaved] = useState(prefs);
   const dirty = (Object.keys(form) as (keyof EmailPrefs)[]).some((k) => form[k] !== saved[k]);
+  const projectBoxes = [
+    ["notifyEmail", t("Menciones en tareas y notas")],
+    ["notifyAssignedEmail", t("Cuando me asignan una tarea")],
+    ["notifyDueEmail", t("Cambios de fecha límite y recordatorios")],
+    ["notifyCommentEmail", t("Comentarios y respuestas en tareas que sigo")],
+  ] as const;
   const set = <K extends keyof EmailPrefs>(key: K, value: EmailPrefs[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   return (
-    <section className="card p-5">
+    <section className="card p-5" data-testid="email-notices">
       <h2 className="flex items-center gap-2 font-semibold"><Mail size={17} /> {t("Avisos por email")}</h2>
-      <p className="mt-0.5 text-sm text-slate-500">
-        {t("Menciones, asignaciones, cambios de fecha y comentarios de lo que sigues salen siempre en la campana; además, por email:")}
-      </p>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Notificaciones por email")}</p>
       {/* Sin email en el servidor, arriba y destacado (antes, una línea gris al final con las casillas como si funcionaran).
           Las casillas se pueden seguir marcando (se guardan para cuando se configure), pero sus textos se ven atenuados: en gris
           (slate-500, 4,7:1 sobre blanco) y no con transparencia, que dejaba las ayudas de debajo en 2,3:1. */}
@@ -65,83 +74,75 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
         </p>
       )}
       <form
-        className={cn("mt-4 space-y-3", !emailAvailable && "[&_label]:text-slate-500 dark:[&_label]:text-slate-400")}
+        className={cn("mt-4 space-y-4", !emailAvailable && "[&_label]:text-slate-500 dark:[&_label]:text-slate-400")}
         onSubmit={(e) => {
           e.preventDefault();
           const sent = form;
-          // La opción de las notas solo se guarda si se ha elegido: sin elegir, sigue a las demás casillas también después.
-          const { noteMentionEmail, ...rest } = sent;
           start(async () => {
-            const res = await updateEmailPrefs(noteMentionEmail ? { ...rest, noteMentionEmail } : rest);
+            const res = await updateEmailPrefs({
+              emailNotices: sent.emailNotices, notifyEmail: sent.notifyEmail, notifyAssignedEmail: sent.notifyAssignedEmail, notifyDueEmail: sent.notifyDueEmail,
+              notifyCommentEmail: sent.notifyCommentEmail, dailyDigest: sent.dailyDigest, digestHour: sent.digestHour,
+              notifyAdminEmail: sent.notifyAdminEmail,
+            });
             toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
             if (res.ok) setSaved(sent);
           });
         }}
       >
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5" checked={form.notifyEmail} onChange={(e) => set("notifyEmail", e.target.checked)} />
-          <span>
-            {t("Email cuando me mencionan")}
-            {/* A todo el mundo (cualquiera puede configurar un informe): este aviso va con las menciones (noticeEmailKind).
-                Telegram y WhatsApp tienen sus propias casillas en su tarjeta: aquí solo se habla del email. */}
-            <span className="block text-xs text-slate-500">
-              {adminNotices
-                ? t("Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste y, como administrador, el de que un proyecto privado ha pasado a ser de equipo al borrarse una cuenta.")
-                : t("Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste.")}
-            </span>
-          </span>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" name="email-notices" checked={form.emailNotices} onChange={(e) => set("emailNotices", e.target.checked)} />
+          {t("Recibir avisos por email")}
         </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5" checked={form.notifyAssignedEmail} onChange={(e) => set("notifyAssignedEmail", e.target.checked)} />
-          <span>{t("Email cuando me asignan una tarea")}</span>
-        </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5" checked={form.notifyDueEmail} onChange={(e) => set("notifyDueEmail", e.target.checked)} />
-          <span>{t("Email con los cambios de fecha límite y los recordatorios de «Esperando»")}</span>
-        </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5" checked={form.notifyCommentEmail} onChange={(e) => set("notifyCommentEmail", e.target.checked)} />
-          <span>{t("Email con los comentarios y respuestas en tareas que sigo")}</span>
-        </label>
-        <div className="text-sm">
-          <span className="flex flex-wrap items-center gap-2">
-            <label htmlFor="note-mention-email">{t("Email cuando me mencionan en una nota de Documentación")}</label>
-            <select
-              id="note-mention-email" className="input w-auto py-1" data-testid="note-mention-email"
-              value={noteMentionEmailMode(form)}
-              onChange={(e) => isNoteMentionEmailMode(e.target.value) && set("noteMentionEmail", e.target.value)}
-            >
-              <option value="NOW">{t("Al momento")}</option>
-              <option value="DIGEST">{t("En el resumen diario")}</option>
-              <option value="OFF">{t("No")}</option>
-            </select>
-          </span>
-          <span className="mt-0.5 block text-xs text-slate-500">
-            {noteMentionEmailMode(form) === "DIGEST" && !form.dailyDigest
-              ? t("Activa el resumen diario (aquí debajo) para recibirlas: sin él no te llega ningún email de estas menciones.")
-              : form.noteMentionEmail === null
-                ? t("Mientras no lo elijas, sigue a tus otras casillas: en el resumen diario si lo tienes activado y, si no, como «Email cuando me mencionan». En la campana salen siempre; por Telegram y WhatsApp, no.")
-                : t("En la campana salen siempre; por Telegram y WhatsApp, no.")}
-          </span>
-        </div>
-        <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
-          <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-0.5" checked={form.dailyDigest} onChange={(e) => set("dailyDigest", e.target.checked)} />
-            <span>
-              <span className="flex items-center gap-1.5 font-medium"><CalendarDays size={15} /> {t("Resumen diario por email")}</span>
-              <span className="block text-xs text-slate-500">{t("Lo ocurrido en 24 horas en tus proyectos y lo que te toca hoy. Sin novedades, no se envía.")}</span>
-            </span>
-          </label>
-          {form.dailyDigest && (
-            <div className="mt-2 ml-6 flex items-center gap-2 text-sm">
-              <label htmlFor="digest-hour">{t("Enviar a las")}</label>
-              <select id="digest-hour" className="input w-auto py-1" value={form.digestHour} onChange={(e) => set("digestHour", Number(e.target.value))}>
-                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{`${String(h).padStart(2, "0")}:00`}</option>)}
-              </select>
-              <span className="text-xs text-slate-500">({timeZone})</span>
-            </div>
-          )}
-        </div>
+        {form.emailNotices && (
+          <div id="email-notices-options" className="space-y-4">
+            <fieldset className="space-y-2">
+              <legend className="mb-1 text-xs font-medium text-slate-500">{adminNotices ? t("Emails de administración de Pizarro") : t("Emails importantes de Pizarro")}</legend>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-0.5" name="email-admin" checked={form.notifyAdminEmail} onChange={(e) => set("notifyAdminEmail", e.target.checked)} />
+                <span>
+                  {adminNotices ? t("Avisos de administración") : t("Avisos importantes")}
+                  <span className="block text-xs text-slate-500">
+                    {adminNotices ? t("Pocos y urgentes: salen siempre al momento.") : t("Cuando te añaden a un proyecto o te afecta un cambio de un administrador. Siempre al momento.")}
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+            <fieldset className="space-y-2">
+              <legend className="mb-1 text-xs font-medium text-slate-500">{t("Emails sobre proyectos")}</legend>
+              {projectBoxes.map(([key, label]) => (
+                <label key={key} className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-0.5" name={`email-${key}`} checked={form[key]} onChange={(e) => set(key, e.target.checked)} />
+                  <span>{label}</span>
+                </label>
+              ))}
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-sm">
+                <label htmlFor="email-frequency">{t("Frecuencia de los emails")}</label>
+                <select
+                  id="email-frequency" className="input w-auto py-1" data-testid="email-frequency"
+                  value={form.dailyDigest ? "DIGEST" : "NOW"} onChange={(e) => set("dailyDigest", e.target.value === "DIGEST")}
+                >
+                  <option value="NOW">{t("Al momento")}</option>
+                  <option value="DIGEST">{t("Resumen diario")}</option>
+                </select>
+                {form.dailyDigest && (
+                  <>
+                    <label htmlFor="digest-hour">{t("a las")}</label>
+                    <select id="digest-hour" className="input w-auto py-1" value={form.digestHour} onChange={(e) => set("digestHour", Number(e.target.value))}>
+                      {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{`${String(h).padStart(2, "0")}:00`}</option>)}
+                    </select>
+                    <span className="text-xs text-slate-500">({timeZone})</span>
+                  </>
+                )}
+              </div>
+              {form.dailyDigest && !projectBoxes.some(([key]) => form[key]) && (
+                <p role="status" className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
+                  {t("Con el resumen diario y ninguna casilla de emails sobre proyectos marcada, no te llegará ningún resumen.")}
+                </p>
+              )}
+            </fieldset>
+          </div>
+        )}
         <button className="btn-primary" disabled={pending || !dirty}>{t("Guardar avisos")}</button>
       </form>
     </section>

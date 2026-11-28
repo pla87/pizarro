@@ -301,10 +301,18 @@ describe("«Avisos por email» de Mi perfil", () => {
   test("una sola acción guarda todas las casillas y la hora del resumen a la vez", async () => {
     const u = await makeUser();
     await loginAs(u);
-    const all = { notifyEmail: false, notifyAssignedEmail: true, notifyDueEmail: false, notifyCommentEmail: true, dailyDigest: true, digestHour: 19 };
+    const all = { notifyEmail: false, notifyAssignedEmail: true, notifyDueEmail: false, notifyCommentEmail: true, dailyDigest: true, digestHour: 19, emailNotices: false };
     expectOk(await updateEmailPrefs(all));
-    const select = { notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true, digestHour: true } as const;
+    const select = { notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true, digestHour: true, emailNotices: true } as const;
     assert.deepEqual(await db.user.findUniqueOrThrow({ where: { id: u.id }, select }), all);
+    // Los emails de administración («Avisos importantes» para quien no es administrador) los guarda cualquiera.
+    expectOk(await updateEmailPrefs({ ...all, notifyAdminEmail: false }));
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: u.id } })).notifyAdminEmail, false);
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    expectOk(await updateEmailPrefs({ ...all, notifyAdminEmail: false }));
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: admin.id } })).notifyAdminEmail, false);
+    await loginAs(u);
     // Faltar una casilla (un navegador con la página de antes) o traer otra cosa no guarda nada a medias.
     const { notifyEmail: _omit, ...partial } = all;
     expectFail(await updateEmailPrefs(partial as typeof all));

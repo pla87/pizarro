@@ -11,12 +11,13 @@ import type { NotificationKind } from "./notification-text";
 // los enlaces de los emails anteriores dejan de valer. No caduca: un email de hace meses debe poder darse de baja igual.
 
 /**
- * Tipos de email que se pueden dar de baja: los cuatro grupos de avisos de Mi perfil, las menciones en notas (v1.77; su
- * opción no es una casilla: la baja la pone en «No»), el resumen y el informe semanal.
+ * Tipos de email que se pueden dar de baja: los cuatro grupos de avisos sobre proyectos de Mi perfil, los emails de
+ * administración (v1.79), el resumen y el informe semanal. «note» (menciones en notas, v1.77) ya no tiene opción propia:
+ * los emails enviados con su enlace siguen valiendo y apagan «Menciones en tareas y notas».
  */
-export type UnsubscribeKind = "mention" | "assigned" | "due" | "comment" | "note" | "digest" | "report";
+export type UnsubscribeKind = "mention" | "assigned" | "due" | "comment" | "admin" | "note" | "digest" | "report";
 
-const CODES: Record<UnsubscribeKind, string> = { mention: "m", assigned: "a", due: "d", comment: "c", note: "n", digest: "g", report: "r" };
+const CODES: Record<UnsubscribeKind, string> = { mention: "m", assigned: "a", due: "d", comment: "c", admin: "x", note: "n", digest: "g", report: "r" };
 const KIND_BY_CODE = new Map(Object.entries(CODES).map(([k, c]) => [c, k as UnsubscribeKind]));
 
 /** Casilla de Mi perfil (columna de User) de cada tipo de email de una persona. */
@@ -25,26 +26,35 @@ export const EMAIL_PREF_FIELD = {
   assigned: "notifyAssignedEmail",
   due: "notifyDueEmail",
   comment: "notifyCommentEmail",
-  digest: "dailyDigest",
-} as const satisfies Record<Exclude<UnsubscribeKind, "report" | "note">, string>;
+  admin: "notifyAdminEmail",
+  /** Enlaces de la v1.77 (menciones en notas): la casilla de las menciones. */
+  note: "notifyEmail",
+} as const satisfies Record<Exclude<UnsubscribeKind, "report" | "digest">, string>;
+
+/** Casillas de «Emails sobre proyectos»: lo que trae el resumen diario y lo que apaga su baja. */
+export const PROJECT_EMAIL_FIELDS = ["notifyEmail", "notifyAssignedEmail", "notifyDueEmail", "notifyCommentEmail"] as const;
 
 /**
  * Grupo de un aviso para el email (la casilla que lo decide y la que apaga su enlace de baja). Los recordatorios de
- * «Esperando» van con las fechas límite (como en Telegram y WhatsApp); los avisos de administración, con las menciones.
+ * «Esperando» van con las fechas límite (como en Telegram y WhatsApp); los avisos de administración (v1.79: proyecto
+ * que pasa a ser de equipo, baja de un informe, enlace revocado) tienen su casilla, y salen siempre al momento.
  */
-export function noticeEmailKind(type: NotificationKind): "mention" | "assigned" | "due" | "comment" {
+export function noticeEmailKind(type: NotificationKind): "mention" | "assigned" | "due" | "comment" | "admin" {
   switch (type) {
     case "ASSIGNED": return "assigned";
     case "DUE_CHANGED":
     case "WAITING": return "due";
     case "COMMENT":
     case "REPLY": return "comment";
+    case "PROJECT_TO_TEAM":
+    case "REPORT_UNSUBSCRIBED":
+    case "SHARE_REVOKED": return "admin";
     default: return "mention";
   }
 }
 
 const SIG_LEN = 32;
-const TOKEN_RE = /^([madcngr])([A-Za-z0-9_-]{1,40})\.([0-9a-f]{32})$/;
+const TOKEN_RE = /^([madcxngr])([A-Za-z0-9_-]{1,40})\.([0-9a-f]{32})$/;
 
 const signed = (kind: UnsubscribeKind, id: string, email: string) => `${kind}:${id}:${email.trim().toLowerCase()}`;
 

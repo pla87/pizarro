@@ -2,6 +2,36 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.79.0 — 2026-11-28 13:34
+
+Avisos por email más simples, avisos push que se prueban en este dispositivo y se renuevan solos, icono de silueta, revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Mi perfil → Avisos → «Avisos por email» más simple: una casilla principal; una casilla de avisos de administración o importantes (siempre al momento); y los emails sobre proyectos («Menciones en tareas y notas», «Cuando me asignan una tarea», «Cambios de fecha límite y recordatorios», «Comentarios y respuestas en tareas que sigo») con «Frecuencia de los emails»: al momento o resumen diario.
+
+### Mejoras
+
+- Avisos en el dispositivo: «Probar» prueba solo este dispositivo y solo si está activado; si algo falla al activarlos, se dice qué y, en Windows y macOS, dónde mirar los permisos del sistema; textos más cortos; icono de silueta en la barra de estado de Android y vibración corta; la suscripción se renueva sola si el navegador la cambia.
+- El resumen diario trae ahora también las menciones en tareas y los cambios de fecha y recordatorios, y solo los comentarios de tareas que sigues (sin repetir los que ya salen en menciones).
+- Si el servidor estuvo parado el día del informe semanal, sale al día siguiente desde la hora elegida (si no cambiaste el horario).
+- Una «Nueva nota» que se cierra sin escribir nada se descarta sola; los borradores locales de notas se borran al cerrar sesión.
+- Móvil: el botón Atrás cierra el menú; con el teclado abierto se ocultan los botones flotantes de crear; «Recordar este dispositivo» conserva su marca si te equivocas de código.
+- El primer administrador tiene 30 minutos para configurar el segundo paso; nadie puede agotar a otra persona el «¿Olvidaste tu contraseña?».
+
+### Correcciones
+
+- Rutinas: si su columna destino pasa a terminada o a Rutinas, deja de ser destino (con deshacer) y la siguiente aparición no nace ya hecha.
+- Editar una tarea que otra persona acaba de archivar da un aviso en vez de cambiarla.
+- Logs: crear un documento de Google, borrar o restablecer plantillas, recuperar las de serie y quitar adjuntos de una release dicen qué se hizo.
+
+### Cambios técnicos / DB
+
+- Migración que solo añade: User.emailNotices y User.notifyAdminEmail (User.noteMentionEmail deja de leerse).
+- Notas: la cuota se comprueba al cruzar cada 64 KB, no en cada guardado; HEAD y 304 sin leer el texto.
+- Logs: las categorías del filtro son fijas (sin recorrer la tabla).
+- Ruta /api/push/renew para la renovación desde el service worker (mismo origen, sesión y solo la suscripción propia de esa sesión).
+
 ## v1.78.0 — 2026-11-27 23:09
 
 Avisos en el dispositivo: notificaciones push del navegador y del móvil, gratis y sin configurar nada

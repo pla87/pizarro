@@ -90,6 +90,32 @@ test("informe semanal: no se repite si el último salió hace menos de 3 días",
   assert.equal(reportDue(new Date("2026-10-26T07:10:00Z"), tz, { weekday: 1, hour: 8, lastSentAt: new Date("2026-10-25T09:00:00Z") }), false);
 });
 
+test("informe semanal: si falló el día elegido, sale en cuanto pueda; sin dos en la misma semana", () => {
+  const tz = "Europe/Madrid";
+  const sentMonday = new Date("2026-10-19T06:10:00Z"); // lunes 08:10
+  const s = { weekday: 1, hour: 8, lastSentAt: sentMonday };
+  // El lunes 26 el servidor estaba parado todo el día: el martes antes de cumplirse 8 días aún no toca...
+  assert.equal(reportDue(new Date("2026-10-27T05:00:00Z"), tz, s), false); // martes 06:00: 7 días y 22 h
+  // ...y desde las 8 días y poco (martes por la mañana) sí, aunque no sea el día elegido.
+  assert.equal(reportDue(new Date("2026-10-27T07:30:00Z"), tz, s), true);
+  assert.equal(reportDue(new Date("2026-10-29T10:00:00Z"), tz, s), true);
+  // Recuperado el martes: no vuelve a salir hasta el lunes siguiente (menos de 3 días y luego el día elegido).
+  const recovered = new Date("2026-10-27T07:30:00Z");
+  assert.equal(reportDue(new Date("2026-10-28T07:30:00Z"), tz, { ...s, lastSentAt: recovered }), false);
+  assert.equal(reportDue(new Date("2026-11-02T07:30:00Z"), tz, { ...s, lastSentAt: recovered }), true);
+  // La recuperación espera a la hora elegida: el martes de madrugada (8 días y poco, pero antes de las 8) no sale.
+  assert.equal(reportDue(new Date("2026-10-28T05:00:00Z"), tz, s), false);
+  assert.equal(reportDue(new Date("2026-10-28T07:30:00Z"), tz, s), true);
+  // Horario editado después del último envío (día cambiado, reactivado): no se recupera, espera al día elegido.
+  const edited = new Date("2026-10-23T10:00:00Z");
+  assert.equal(reportDue(new Date("2026-10-27T07:30:00Z"), tz, { ...s, weekday: 3, updatedAt: edited }), false);
+  assert.equal(reportDue(new Date("2026-10-28T07:30:00Z"), tz, { ...s, weekday: 3, updatedAt: edited }), true); // el día elegido sí
+  // El propio envío toca updatedAt unos milisegundos después: no cuenta como edición.
+  assert.equal(reportDue(new Date("2026-10-27T07:30:00Z"), tz, { ...s, updatedAt: new Date(sentMonday.getTime() + 500) }), true);
+  // Sin ningún envío anterior no se recupera nada: activar el informe a mitad de semana no manda uno al momento.
+  assert.equal(reportDue(new Date("2026-10-28T10:00:00Z"), tz, { ...s, lastSentAt: null }), false);
+});
+
 // --- Mis tareas ---
 
 test("mis tareas: grupos por vencimiento respecto a hoy", () => {
@@ -234,7 +260,7 @@ test("avisos: email por tipo y preferencias", () => {
   assert.match(unsub.text, /\nDejar de recibir estos emails: https:\/\/a\.b\/unsubscribe\/mX\.y\nNo respondas/);
   assert.match(unsub.html, /<a href="https:\/\/a\.b\/unsubscribe\/mX\.y"[^>]*>Dejar de recibir estos emails<\/a>/);
   assert.doesNotMatch(mentionEmail({ ...msg, type: "MENTION" }).text, /Dejar de recibir/);
-  const prefs = { notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: true, notifyCommentEmail: false };
+  const prefs = { emailNotices: true, notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: true, notifyCommentEmail: false, notifyAdminEmail: true, dailyDigest: false };
   assert.equal(emailWanted("MENTION", prefs), true);
   assert.equal(emailWanted("ASSIGNED", prefs), false);
   assert.equal(emailWanted("DUE_CHANGED", prefs), true);
@@ -243,7 +269,19 @@ test("avisos: email por tipo y preferencias", () => {
   // Los recordatorios de «Esperando» van con las fechas límite (como en Telegram y WhatsApp), no con las menciones.
   assert.equal(emailWanted("WAITING", prefs), true);
   assert.equal(emailWanted("WAITING", { ...prefs, notifyEmail: true, notifyDueEmail: false }), false);
-  assert.equal(emailWanted("PROJECT_TO_TEAM", { ...prefs, notifyEmail: false }), false);
+  // Administración (v1.79): su propia casilla, no la de las menciones; siempre al momento.
+  const admin = ["PROJECT_TO_TEAM", "REPORT_UNSUBSCRIBED", "SHARE_REVOKED"] as const;
+  for (const type of admin) {
+    assert.equal(emailWanted(type, { ...prefs, notifyEmail: false }), true, type);
+    assert.equal(emailWanted(type, { ...prefs, notifyAdminEmail: false }), false, type);
+    assert.equal(emailWanted(type, { ...prefs, dailyDigest: true }), true, type);
+  }
+  // Con «Resumen diario», lo de proyectos marcado va en el resumen y no al momento.
+  const digest = { ...prefs, dailyDigest: true, notifyAssignedEmail: true, notifyCommentEmail: true };
+  for (const type of ["MENTION", "ASSIGNED", "DUE_CHANGED", "WAITING", "COMMENT", "REPLY"] as const) assert.equal(emailWanted(type, digest), false, type);
+  // Casilla principal apagada: nada, ni administración.
+  const all = { ...prefs, notifyAssignedEmail: true, notifyCommentEmail: true, emailNotices: false };
+  for (const type of ["MENTION", "ASSIGNED", "DUE_CHANGED", "WAITING", "COMMENT", "REPLY", ...admin] as const) assert.equal(emailWanted(type, all), false, type);
 });
 
 // --- Menciones en el título ---

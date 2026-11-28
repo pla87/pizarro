@@ -23,6 +23,12 @@ import {
 
 export const CHALLENGE_COOKIE = "pz_2fa";
 export const CHALLENGE_TTL_MS = 10 * 60_000;
+/** El alta del segundo paso (SETUP) deja tiempo para instalar una app de autenticación y volver (sobre todo en el móvil). */
+const SETUP_CHALLENGE_TTL_MS = 30 * 60_000;
+/** Cuánto vale un desafío de acceso según su tipo. */
+function challengeTtlMs(kind: "LOGIN" | "SETUP"): number {
+  return kind === "SETUP" ? SETUP_CHALLENGE_TTL_MS : CHALLENGE_TTL_MS;
+}
 /** Fallos permitidos por cada contraseña correcta, y por persona y hora. */
 const MAX_ATTEMPTS = 5;
 const MAX_ATTEMPTS_PER_USER_HOUR = 20;
@@ -51,12 +57,13 @@ async function clearChallengeCookie(): Promise<void> {
 /** Abre el estado pendiente de este navegador (sustituye a cualquier otro de la misma persona). */
 export async function startChallenge(userId: string, kind: "LOGIN" | "SETUP", opts: { next?: string; remember?: boolean; via?: "google" } = {}): Promise<Challenge> {
   const token = newToken();
+  const ttl = challengeTtlMs(kind);
   await db.loginChallenge.deleteMany({ where: { OR: [{ userId, kind: { in: ["LOGIN", "SETUP"] } }, { expiresAt: { lt: new Date() } }] } });
   const row = await db.loginChallenge.create({
-    data: { userId, kind, tokenHash: hashAuthToken(token), next: opts.next?.slice(0, 500) || null, via: opts.via ?? null, expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS) },
+    data: { userId, kind, tokenHash: hashAuthToken(token), next: opts.next?.slice(0, 500) || null, via: opts.via ?? null, expiresAt: new Date(Date.now() + ttl) },
     include: challengeInclude,
   });
-  await setChallengeCookie(token, CHALLENGE_TTL_MS);
+  await setChallengeCookie(token, ttl);
   return row;
 }
 

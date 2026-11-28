@@ -95,7 +95,7 @@ function sameKeys(enc: string, keys: PushKeys): boolean {
 }
 
 export class PushSubscribeError extends Error {
-  constructor(readonly reason: "service" | "keys" | "limit") {
+  constructor(readonly reason: "service" | "keys" | "limit" | "unknown") {
     super(reason);
   }
 }
@@ -128,6 +128,34 @@ export async function savePushSubscription(userId: string, sessionId: string, in
     if (prev) await tx.pushSubscription.delete({ where: { id: prev.id } });
     const row = await tx.pushSubscription.create({ data: { ...data, endpointHash: hash }, select: { id: true } });
     return { id: row.id, created: true };
+  });
+}
+
+/**
+ * Cambia la suscripción de un dispositivo por otra nueva del mismo navegador (el navegador renovó la suya: evento
+ * `pushsubscriptionchange` o resincronización al abrir la app). Solo sustituye una suscripción PROPIA de ESTA sesión:
+ * la vieja se reconoce por su huella (`oldHash`) y tiene que ser de `userId` y de `sessionId`; con otra huella, de otra
+ * persona o de otra sesión no hace nada (reason «unknown»). La nueva pasa las mismas comprobaciones que savePushSubscription
+ * (servicio de la lista cerrada, claves válidas); si ya estaba guardada con otra cuenta, solo pasa con las mismas claves.
+ */
+export async function renewPushSubscription(userId: string, sessionId: string, oldHash: unknown, input: { endpoint: unknown; keys: unknown }, userAgent: string): Promise<{ id: string }> {
+  if (typeof oldHash !== "string" || !/^[0-9a-f]{64}$/.test(oldHash)) throw new PushSubscribeError("unknown");
+  const host = pushEndpointHost(input.endpoint);
+  if (!host) throw new PushSubscribeError("service");
+  const keys = validPushKeys(input.keys);
+  if (!keys) throw new PushSubscribeError("keys");
+  const endpoint = input.endpoint as string;
+  const hash = endpointHash(endpoint);
+  const vapid = await vapidKeys();
+  const data = { vapidPublicKey: vapid.publicKey, endpointEnc: encryptSecret(endpoint), keysEnc: encryptSecret(JSON.stringify(keys)), host, userAgent: userAgent.slice(0, 300), endpointHash: hash };
+  return db.$transaction(async (tx) => {
+    const old = await tx.pushSubscription.findFirst({ where: { endpointHash: oldHash, userId, sessionId }, select: { id: true } });
+    if (!old) throw new PushSubscribeError("unknown");
+    const other = hash === oldHash ? null : await tx.pushSubscription.findUnique({ where: { endpointHash: hash }, select: { id: true, userId: true, keysEnc: true } });
+    if (other && other.userId !== userId && !sameKeys(other.keysEnc, keys)) throw new PushSubscribeError("keys");
+    if (other) await tx.pushSubscription.delete({ where: { id: other.id } });
+    await tx.pushSubscription.update({ where: { id: old.id }, data });
+    return { id: old.id };
   });
 }
 
@@ -209,9 +237,9 @@ interface PushResult {
 export async function sendPushToUser(
   user: { id: string; name: string },
   message: PushMessage,
-  log: { projectId?: string; details?: Record<string, unknown>; test?: boolean } = {},
+  log: { projectId?: string; details?: Record<string, unknown>; test?: boolean; /** Solo a ese dispositivo (huella del endpoint): «Probar» prueba el de quien pulsa. */ onlyHash?: string } = {},
 ): Promise<PushResult> {
-  const subs = await db.pushSubscription.findMany({ where: { userId: user.id }, select: { id: true, host: true, endpointEnc: true, keysEnc: true, vapidPublicKey: true, session: { select: { expiresAt: true } } } });
+  const subs = await db.pushSubscription.findMany({ where: { userId: user.id, ...(log.onlyHash ? { endpointHash: log.onlyHash } : {}) }, select: { id: true, host: true, endpointEnc: true, keysEnc: true, vapidPublicKey: true, session: { select: { expiresAt: true } } } });
   const out: PushResult = { sent: 0, failed: 0, expired: 0, errors: [] };
   if (!subs.length) return out;
   const [first, sub] = await Promise.all([vapidKeys(), subject()]);

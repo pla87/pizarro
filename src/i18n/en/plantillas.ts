@@ -14,4 +14,8 @@ export const plantillas: Record<string, string> = {
   // Editor de plantillas de proyecto: «Tipo por defecto» de cada columna
   "Sin tipo por defecto": "No default type",
   "Tipo por defecto de la columna {n}": "Default type of column {n}",
+  // Logs de borrar, restablecer y recuperar plantillas
+  "Borró la plantilla de proyecto «{name}»": "Deleted the project template “{name}”",
+  "Restableció la plantilla de proyecto «{name}»": "Reset the project template “{name}”",
+  "Recuperó las plantillas de serie borradas: {n}": "Restored the deleted built-in templates: {n}",
 };

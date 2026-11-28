@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { findDocumentWithNoteForUser } from "@/lib/documents";
+import { findDocumentForUser, isNoteDocument, readNoteBody } from "@/lib/documents";
 import { documentDownloadName } from "@/lib/document-kind";
 import { ifNoneMatchHas } from "@/lib/etag";
 import { logEvent } from "@/lib/log";
@@ -38,7 +38,8 @@ async function serve(req: Request, ctx: { params: Promise<{ documentId: string }
   const { documentId } = await ctx.params;
   if (!/^[a-z0-9]{1,40}$/i.test(documentId)) return new Response(t("No encontrado"), { status: 404 });
 
-  const doc = await findDocumentWithNoteForUser(user, documentId);
+  // Sin el texto de la nota: el ETag solo necesita su tamaño y su versión; el texto se lee al servir el cuerpo.
+  const doc = await findDocumentForUser(user, documentId);
   if (!doc) return new Response(t("No encontrado"), { status: 404 });
   // Pedido por un <img> (una imagen de Documentación en una nota, una descripción o un comentario): solo se sirven las
   // imágenes, y nunca cuenta como descarga. Un `![x](/api/documents/<id de un .zip>)` registraba una «descarga» a nombre
@@ -46,13 +47,15 @@ async function serve(req: Request, ctx: { params: Promise<{ documentId: string }
   const asImage = req.headers.get("sec-fetch-dest") === "image";
   if (asImage && doc.kind !== "IMAGE") return new Response(t("No encontrado"), { status: 404 });
 
-  // Una nota (escrita en la app) no tiene fichero: se sirve su texto, como un .md, con la versión en el ETag.
-  const noteBody = doc.noteContent !== null ? Buffer.from(doc.noteContent, "utf8") : null;
+  // Una nota (escrita en la app) no tiene fichero: se sirve su texto, como un .md, con la versión en el ETag. `size` ya
+  // son los bytes de su texto (se guarda con él), así que HEAD y el 304 no leen el texto.
+  // Las notas son siempre MARKDOWN (createNoteRow, import): para imágenes, PDF y demás no se hace la consulta.
+  const isNote = doc.kind === "MARKDOWN" && (await isNoteDocument(doc.id));
   const file = documentPath(doc.id);
   let size: number;
   let stamp: string;
-  if (noteBody) {
-    size = noteBody.length;
+  if (isNote) {
+    size = doc.size;
     stamp = `n${doc.noteVersion.toString(36)}`;
   } else {
     try {
@@ -106,7 +109,20 @@ async function serve(req: Request, ctx: { params: Promise<{ documentId: string }
     "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${filename}`,
   };
   if (head) return new Response(null, { headers: fullHeaders });
-  if (noteBody) return new Response(new Uint8Array(noteBody), { headers: fullHeaders });
+  if (isNote) {
+    // El texto se lee solo ahora. Si cambió desde la comprobación de arriba, el cuerpo, su tamaño y su ETag son los de lo leído.
+    const body = await readNoteBody(doc.id);
+    if (!body) return new Response(t("No encontrado"), { status: 404 });
+    const bytes = Buffer.from(body.content, "utf8");
+    return new Response(new Uint8Array(bytes), {
+      headers: {
+        ...fullHeaders,
+        ETag: `"${doc.id}-${bytes.length.toString(36)}-n${body.version.toString(36)}"`,
+        "Content-Length": String(bytes.length),
+        [DECLARED_LENGTH_HEADER]: String(bytes.length),
+      },
+    });
+  }
   const stream = Readable.toWeb(createReadStream(file)) as ReadableStream;
   return new Response(stream, { headers: fullHeaders });
 }

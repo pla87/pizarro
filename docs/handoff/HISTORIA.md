@@ -14,6 +14,19 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 75 (ya aplicadas, v1.79.0):** el propietario probó los push: Android bien (instalada y web en
+incógnito); en Chrome de Windows «Probar» sonó en el móvil porque el PC no estaba suscrito (casilla sin marcar) y
+«Probar» enviaba a todos. Hecho: «Probar» solo a este dispositivo y errores claros al activar (R71C1), textos cortos
+(R71M1), icono de silueta para la barra de Android y vibración (R71M2; la ventana emergente la decide Android por sitio o
+app), renovación automática de la suscripción (aprobado), «Avisos por email» simplificado (R71M3: casilla principal,
+administración/importantes siempre al momento, cuatro casillas de proyectos con frecuencia al momento/resumen; la casilla
+de importantes se muestra también a quien no es admin, porque recibe avisos de ese tipo). 3 vueltas de revisión y caza de
+bugs (R71M4/M5) con agentes de modelo más sencillo revisados por la sesión principal: lo evidente aplicado (ver changelog
+v1.79.0). knip ya funciona en la nube (el propietario subió `.claude/settings.json`). Pendiente de decidir (opcional): las
+tareas nuevas y terminadas siempre en el resumen diario; exportar «Sin adjuntos» sin las imágenes que citan las notas;
+borrado de tareas sin `lockTaskRowsForDelete`; `Permissions-Policy` de cámara y micrófono; ocultar los botones flotantes
+solo con el teclado realmente abierto; retirar la rama «Probar a todos» de `testPush`.
+
 **Ronda 74, v1.78.0 (ya aplicada):** avisos push como canal opcional, aprobado por el propietario. Decisiones: tabla
 propia (no un valor de enum en `MessagingChannel`), preferencias por persona con los grupos de Telegram (comentarios
 apagados por defecto), 30/h y 10 dispositivos por persona, menciones en notas también por push (gratis), suscripción atada a

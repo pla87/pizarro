@@ -55,7 +55,7 @@ test("rateLimit: inundar claves normales no borra los bloqueos de seguridad (log
   Date.now = () => now;
   try {
     // También borrar la cuenta y la confirmación para descargar la copia de seguridad (intentos de contraseña o código).
-    const locked = ["login:acct:victima@example.com", "reset:email:victima@example.com", "2fa:user:u1", "setup:fail:all", "account-delete:u1", "backup-dl:u1", "feedback:install", "feedback:user:u1", "feedback-try:u1",
+    const locked = ["login:acct:victima@example.com", "reset:email:victima@example.com:203.0.113.9", "2fa:user:u1", "setup:fail:all", "account-delete:u1", "backup-dl:u1", "feedback:install", "feedback:user:u1", "feedback-try:u1",
       // Topes de emails y mensajes a terceros: invitaciones, «te han añadido» (por quien añade y por pareja), Telegram.
       "notify:u1", "notify:system:t1", "whatsapp:number:u1", "messaging:test:a1", "mail:test:a1", "report-schedule:u1", "project-invite:u1", "resend-invite:u1", "project-added-mail:u1", "project-added-mail:u1:u2:p1", "telegram:link:123", "telegram:reply:123",
       // Emails de restablecer (por dirección al día y el global de repetidos al día) y códigos de 2FA por persona.

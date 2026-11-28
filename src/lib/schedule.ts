@@ -40,11 +40,32 @@ export function digestDue(now: Date, timeZone: string, s: { hour: number; lastSe
   return localParts(now, timeZone).hour >= s.hour && !sentToday(s.lastSentAt, now, timeZone);
 }
 
+/** Si el último informe salió hace esto o más (8 días), se envió uno menos de la cuenta y toca ya, sea cual sea el día. */
+const REPORT_CATCH_UP_MS = 8 * 24 * 60 * 60 * 1000;
+/** Margen entre `lastSentAt` y `updatedAt` para no tomar el propio envío por una edición del horario. */
+const REPORT_EDIT_MARGIN_MS = 5 * 60 * 1000;
+
 /**
  * Informe semanal: hoy es el día elegido, ya es la hora (o pasó) y el último salió hace al menos 3 días. Así, si se
  * envía el lunes y se cambia al viernes, el viernes llega; si se cambia al martes, no se repite al día siguiente.
+ *
+ * Recuperación: si el servidor estuvo parado todo el día elegido (un despliegue, una caída), el informe no se pierde
+ * hasta la semana siguiente: toca también en cualquier otro día cuando el último salió hace 8 días o más (un envío a
+ * tiempo se repite cada 7; con 8 es que falló uno). Sin ningún envío anterior (`lastSentAt` nulo) no se recupera nada,
+ * para que activar el informe a mitad de semana no mande uno al momento. Tras recuperarlo, `lastSentAt` es de ahora, así
+ * que no salen dos en la misma semana, y la regla de los 3 días sigue valiendo.
+ *
+ * La recuperación respeta lo que la persona eligió: solo corre desde la hora elegida (no de madrugada) y no corre si el
+ * horario se editó (o se reactivó) después del último envío (`updatedAt` posterior a `lastSentAt` en más de unos
+ * minutos: el propio envío también toca `updatedAt`, de ahí el margen). En ese caso espera al día y hora elegidos.
+ * Un envío fallido que devuelve la reserva también toca `updatedAt`: ese informe espera al día elegido de la semana
+ * siguiente en vez de reintentarse cada día.
  */
-export function reportDue(now: Date, timeZone: string, s: { weekday: number; hour: number; lastSentAt: Date | null }): boolean {
+export function reportDue(now: Date, timeZone: string, s: { weekday: number; hour: number; lastSentAt: Date | null; updatedAt?: Date | null }): boolean {
+  if (sentRecently(s.lastSentAt, now)) return false;
   const local = localParts(now, timeZone);
-  return local.weekday === s.weekday && local.hour >= s.hour && !sentRecently(s.lastSentAt, now);
+  if (local.weekday === s.weekday && local.hour >= s.hour) return true;
+  if (!s.lastSentAt || local.hour < s.hour) return false;
+  if (s.updatedAt && s.updatedAt.getTime() - s.lastSentAt.getTime() > REPORT_EDIT_MARGIN_MS) return false;
+  return now.getTime() - s.lastSentAt.getTime() >= REPORT_CATCH_UP_MS;
 }

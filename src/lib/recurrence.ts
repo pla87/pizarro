@@ -46,7 +46,7 @@ type RoutineSource = { projectId: string; columnId: string; routineColumnId: str
 
 /**
  * Columna ROUTINES de la que cuelga cada tarea recurrente (en la que está o la última en la que estuvo) y columna
- * donde nace su siguiente aparición: la destino configurada o, por defecto, la propia columna de rutinas
+ * donde nace su siguiente aparición: la destino configurada (si sigue valiendo: ni terminada ni de rutinas) o, por defecto, la propia columna de rutinas
  * (salvo que cuente como terminada: entonces se sigue la regla general). null si no viene de una rutina.
  * Una sola consulta para todo el lote.
  */
@@ -57,11 +57,20 @@ async function routineColumnsOf(sources: RoutineSource[]): Promise<(src: Routine
     ? await db.column.findMany({ where: { id: { in: ids }, role: "ROUTINES" }, select: { id: true, projectId: true, isDone: true, routineTargetColumnId: true } })
     : [];
   const byId = new Map(cols.map((c) => [c.id, c]));
+  // El destino configurado puede haber dejado de valer después de elegirlo (se marcó como terminada o pasó a «Rutinas»,
+  // que setColumnRoutineTarget solo rechaza al elegirlo): entonces la aparición no puede nacer ahí (nacería ya hecha) y
+  // se aplica la regla por defecto, como si no hubiera destino.
+  const targetIds = [...new Set(cols.map((c) => c.routineTargetColumnId).filter((id): id is string => !!id))];
+  const validTargets = new Set(
+    targetIds.length
+      ? (await db.column.findMany({ where: { id: { in: targetIds }, isDone: false, role: { not: "ROUTINES" } }, select: { id: true } })).map((c) => c.id)
+      : [],
+  );
   return (src) => {
     const id = idOf(src);
     const col = id ? byId.get(id) : undefined;
     if (!col || col.projectId !== src.projectId) return null;
-    if (col.routineTargetColumnId) return { columnId: col.id, targetId: col.routineTargetColumnId };
+    if (col.routineTargetColumnId && validTargets.has(col.routineTargetColumnId)) return { columnId: col.id, targetId: col.routineTargetColumnId };
     return col.isDone ? null : { columnId: col.id, targetId: col.id };
   };
 }

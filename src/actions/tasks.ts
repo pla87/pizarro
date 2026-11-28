@@ -810,7 +810,9 @@ async function applyTaskUpdate(
       const kindBefore = alsoInTx
         ? (await tx.$queryRaw<{ kindId: string }[]>`SELECT "kindId" FROM "Task" WHERE "id" = ${taskId} FOR NO KEY UPDATE`)[0]?.kindId ?? task.kindId
         : task.kindId;
-      await tx.task.update({ where: { id: taskId }, data: fields, select: { id: true } });
+      // Solo si sigue activa: otra persona puede haberla archivado después de la comprobación de arriba (como en moveTask).
+      const { count: updated } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: fields });
+      if (!updated) throw await inactiveTaskError(tx, taskId);
       if (labelIds) {
         await tx.taskLabel.deleteMany({ where: { taskId } });
         await tx.taskLabel.createMany({ data: [...new Set(labelIds)].map((labelId) => ({ taskId, labelId })) });
@@ -1986,7 +1988,7 @@ const linkSelect = { id: true, kind: true, title: true, url: true, shareStatus: 
 export async function createGoogleFile(taskId: string, kind: GoogleFileKind, title: string) {
   return runAction({ name: "tasks.createGoogleFile", args: [taskId, kind, title] }, async (): Promise<TaskLinkInfo> => {
     const user = await requireUser();
-    const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
+    const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true, title: true });
     assertNotArchivedRow(task);
     const { projectId } = task;
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
@@ -2012,6 +2014,7 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
     });
     // Deshacer quita el enlace; el archivo sigue en Google Drive.
     addUndo({ t: "link.remove", id: link.id });
+    describeAction("Creó el documento de Google «{title}» en «{task}»", { title: link.title, task: task.title }, { taskId, kind: fileKind });
     return link;
   });
 }

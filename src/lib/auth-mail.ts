@@ -105,8 +105,8 @@ export async function sendProjectInviteMail(user: Recipient, url: string, invite
 
 /** Aviso a quien ya tiene cuenta: otra persona le ha añadido a un proyecto. El enlace lleva a su tablero. */
 export function sendProjectAddedMail(user: Recipient & { id: string }, addedBy: string, projectName: string, url: string): Promise<void> {
-  // Depende de «Avisos de menciones» (como el de un proyecto que pasa a ser de equipo): su baja apaga esa casilla.
-  const unsubscribe = unsubscribeLinks("mention", user.id, user.email);
+  // Es un email de administración (casilla notifyAdminEmail, siempre al momento; lo decide quien llama): su baja apaga esa casilla.
+  const unsubscribe = unsubscribeLinks("admin", user.id, user.email);
   return send(user, user.locale, (t) => ({
     unsubscribe,
     subject: t("{name} te ha añadido al proyecto «{project}»", { name: addedBy, project: projectName }),

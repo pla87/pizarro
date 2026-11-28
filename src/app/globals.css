@@ -631,6 +631,17 @@ body:has([data-pz-modal]) [data-board-fab] {
 }
 
 /*
+ * Con el teclado del móvil abierto (un campo de texto con foco: buscador de tarjetas, renombrar una columna…) el
+ * viewport se reduce (`interactiveWidget: resizes-content`) y los botones flotantes quedarían sobre lo que se escribe:
+ * se ocultan mientras dure el foco. Solo en pantallas táctiles; al salir del campo vuelven.
+ */
+@media (pointer: coarse) {
+  body:has(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="file"], [type="range"]):focus, textarea:focus, [contenteditable="true"]:focus) [data-board-fab] {
+    display: none;
+  }
+}
+
+/*
  * Un diálogo centrado encima de otro («Cambios sin guardar», una confirmación…, `data-pz-side="center"` detrás de otro
  * `data-pz-modal`): las copias flotantes de Deshacer y «Nueva tarea» (`data-pz-layer`, z-70) quedaban por encima de su
  * fondo, brillantes y pulsables mientras se pregunta. Con la pareja de diálogos (izquierda y derecha) siguen a la vista.

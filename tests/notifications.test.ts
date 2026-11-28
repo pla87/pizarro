@@ -7,7 +7,6 @@ import { readFileSync } from "node:fs";
 import { isProjectNotice, notificationBody, notificationHeadline, projectNoticeActor, projectNoticePath, shareRevokedExcerpt } from "../src/lib/notification-text";
 import { channelWants, DEFAULT_CHANNEL_PREFS, noticeLinkLabel } from "../src/lib/messaging-core";
 import { makeT } from "../src/i18n/core";
-import { noteMentionEmailMode } from "../src/lib/note-mention-pref";
 
 /** `window` de mentira (EventTarget) durante `fn`: las pruebas corren en Node. */
 function withWindow(fn: () => void): void {
@@ -98,15 +97,11 @@ test("Avisos: la raya de la cita va al inicio del texto (también en RTL) y el f
 
 // --- Menciones en notas de Documentación (v1.77) ----------------------------------------------------------------------
 
-test("menciones en notas: cabecera, enlace y opción de email por defecto", () => {
+test("menciones en notas: cabecera y enlace", () => {
   const es = makeT("es");
   const en = makeT("en");
   assert.equal(notificationHeadline("MENTION", es, { actor: "Ana", task: "«Acta semanal»", note: true }), "Ana te ha mencionado en la nota «Acta semanal»");
   assert.equal(notificationHeadline("MENTION", en, { actor: "Ana", task: "“Weekly”", note: true }), "Ana mentioned you in the note “Weekly”");
   assert.equal(notificationHeadline("MENTION", es, { actor: "Ana", task: "«Tarea»" }), "Ana te ha mencionado en «Tarea»");
   assert.equal(noticeLinkLabel({ type: "MENTION", note: true }, es), "Abrir la nota");
-  // Sin elegir: en el resumen si lo tiene; si no, como el email de menciones. Lo elegido manda; lo desconocido no cuenta.
-  const mode = (noteMentionEmail: string | null, notifyEmail: boolean, dailyDigest: boolean) => noteMentionEmailMode({ noteMentionEmail, notifyEmail, dailyDigest });
-  assert.deepEqual([mode(null, true, true), mode(null, true, false), mode(null, false, false), mode(null, false, true)], ["DIGEST", "NOW", "OFF", "DIGEST"]);
-  assert.deepEqual([mode("NOW", false, true), mode("OFF", true, true), mode("DIGEST", true, false), mode("RARO", true, false)], ["NOW", "OFF", "DIGEST", "NOW"]);
 });

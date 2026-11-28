@@ -4,7 +4,7 @@ import { z } from "zod";
 import { describeAction } from "@/lib/action-context";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess } from "@/lib/access";
-import { createNoteRow, deleteTrashedDocumentRow, getNoteForUser, renameDocumentRow, restoreDocumentRow, saveNoteRow, searchNoteIds, setDocumentPinnedRow, trashDocumentRow } from "@/lib/documents";
+import { createNoteRow, deleteTrashedDocumentRow, discardEmptyNoteRow, getNoteForUser, renameDocumentRow, restoreDocumentRow, saveNoteRow, searchNoteIds, setDocumentPinnedRow, trashDocumentRow } from "@/lib/documents";
 import { NOTE_MAX_CHARS, sanitizeDocumentName } from "@/lib/document-kind";
 import { getT } from "@/i18n/server";
 import { requireUser } from "@/lib/session";
@@ -62,6 +62,20 @@ export async function createNote(projectId: string) {
     const doc = await createNoteRow(user, id, t("Nota sin título"));
     describeAction("Creó la nota «{name}»", { name: doc.name }, { documentId: doc.id });
     return doc;
+  });
+}
+
+/**
+ * Descarta la nota que acaba de crearse con «Nueva nota» si se cierra sin haber escrito nada (no deja una «Nota sin
+ * título» vacía en la lista). Solo borra una nota vacía, sin guardar nunca, sin renombrar ni fijar y creada por esta
+ * persona; en cualquier otro caso no hace nada (`discarded: false`).
+ */
+export async function discardEmptyNote(documentId: string) {
+  return runAction({ name: "documents.discardEmptyNote", args: [documentId] }, async () => {
+    const user = await requireUser();
+    const gone = await discardEmptyNoteRow(user, v.id.parse(documentId));
+    if (gone) describeAction("Descartó la nota vacía «{name}»", { name: gone.name }, { documentId: gone.id });
+    return { discarded: !!gone };
   });
 }
 

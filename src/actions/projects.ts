@@ -260,7 +260,7 @@ export async function deleteProject(projectId: string, confirmName: string) {
  * Asigna a un usuario activo al proyecto. En uno privado, cualquier miembro puede hacerlo; en uno de equipo, los
  * administradores. Un administrador asignado a uno de equipo queda además con el proyecto elegido (AdminProjectPick),
  * para que le salga en sus selectores. Si la persona no estaba ya en el proyecto (y no es quien la añade), recibe un email
- * con el enlace al tablero, salvo que haya desactivado los avisos por email de menciones y administración (los mismos que el
+ * con el enlace al tablero, salvo que haya desactivado los emails de administración o los avisos por email (los mismos que el
  * aviso «el proyecto pasa a ser de equipo», ver emailWanted en notify.ts). Devuelve ese enlace para
  * pasárselo por otro canal (botón «Copiar enlace»).
  */
@@ -270,7 +270,7 @@ export async function addProjectMember(projectId: string, userId: string) {
     const project = await findManageableProject(user, projectId);
     const target = await db.user.findFirst({
       where: { id: v.id.parse(userId), active: true },
-      select: { id: true, name: true, email: true, locale: true, role: true, notifyEmail: true, mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } },
+      select: { id: true, name: true, email: true, locale: true, role: true, emailNotices: true, notifyAdminEmail: true, mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } },
     });
     if (!target) throw new AppError("Usuario no válido.");
     const pick = !project.isPrivate && target.role === "ADMIN";
@@ -284,7 +284,7 @@ export async function addProjectMember(projectId: string, userId: string) {
     // activos. El tope por persona que añade evita usar la lista de miembros para mandar correo en masa; el de cada
     // pareja (quien añade, persona, proyecto), que añadir, quitar y volver a añadir repita el email: uno al día.
     const pairKey = `project-added-mail:${user.id}:${target.id}:${project.id}`;
-    const emailed = created && target.id !== user.id && target.notifyEmail && emailEnabled()
+    const emailed = created && target.id !== user.id && target.emailNotices && target.notifyAdminEmail && emailEnabled()
       && !rateLimitReached(pairKey, 1)
       && rateLimit(`project-added-mail:${user.id}`, 40, 60 * 60_000)
       && rateLimit(pairKey, 1, 24 * 60 * 60_000);

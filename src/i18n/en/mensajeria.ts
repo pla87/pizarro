@@ -235,11 +235,8 @@ export const mensajeria: Record<string, string> = {
     "Maximum WhatsApp notifications per day (from midnight, in the installation's time zone) across everyone. Once reached, for the rest of the day notifications only stay in the app and the other channels, and a line is written to Logs. Empty = {n}.",
   // Avisos push del navegador (Mi perfil → Avisos → «Avisos en este dispositivo», Logs)
   "Avisos en este dispositivo": "Notifications on this device",
-  "Notificaciones del navegador o del móvil, aunque Pizarro esté cerrado. Gratis. Se activan en cada dispositivo y al cerrar sesión se desactivan en ese navegador.":
-    "Browser or phone notifications, even when Pizarro is closed. Free. Turn them on on each device; signing out turns them off in that browser.",
   "Recibir avisos en este dispositivo": "Get notifications on this device",
   "Qué avisos recibir en tus dispositivos": "Which notifications your devices get",
-  "Menciones (@), también en notas de Documentación": "Mentions (@), also in Documentation notes",
   "Tus dispositivos con avisos ({n} de {max})": "Your devices with notifications ({n} of {max})",
   "Este dispositivo": "This device",
   "Desde el {date} · servicio de {service}": "Since {date} · {service} service",
@@ -247,7 +244,6 @@ export const mensajeria: Record<string, string> = {
   "Avisos activados en este dispositivo.": "Notifications turned on on this device.",
   "Avisos desactivados en este dispositivo.": "Notifications turned off on this device.",
   "Dispositivo quitado.": "Device removed.",
-  "Aviso de prueba enviado a {sent} de {total} dispositivos.": "Test notification sent to {sent} of {total} devices.",
   "Aviso de prueba enviado. Si no lo ves, revisa los permisos de notificaciones del sistema.":
     "Test notification sent. If you don't see it, check the system's notification permissions.",
   "El navegador no ha podido activar los avisos. Si usas Brave, activa «Usar los servicios de Google para la mensajería push» en su configuración.":
@@ -281,4 +277,21 @@ export const mensajeria: Record<string, string> = {
   "Avisos push: no se pudo descifrar la clave de la instalación (¿cambió ENCRYPTION_KEY?) y se ha creado otra; se han quitado los {n} dispositivos suscritos y cada persona tiene que volver a activar los avisos en los suyos":
     "Push notifications: the installation key could not be decrypted (did ENCRYPTION_KEY change?) and a new one was created; the {n} subscribed devices were removed and everyone has to turn notifications on again on theirs",
   "{n} aviso(s) de mención en una nota creados ({external} con envío externo al momento)": "{n} note mention notification(s) created ({external} sent outside right away)",
+  // Avisos push (ronda 76): textos más cortos, «Probar» en este dispositivo, errores al activar
+  "Notificaciones del navegador o del móvil": "Browser or phone notifications",
+  "Menciones (@) en tareas y notas": "Mentions (@) in tasks and notes",
+  "Cambios de fecha límite y recordatorios": "Due date changes and reminders",
+  "Para probar los avisos, actívalos primero en este dispositivo.": "To test notifications, turn them on first on this device.",
+  "No se ha podido enviar el aviso de prueba a este dispositivo. Desactiva y vuelve a activar los avisos aquí.":
+    "The test notification couldn't be sent to this device. Turn notifications off and on again here.",
+  "Aviso de prueba enviado. Si no lo ves, mira Configuración de Windows → Sistema → Notificaciones → {browser}.":
+    "Test notification sent. If you don't see it, check Windows Settings → System → Notifications → {browser}.",
+  "Aviso de prueba enviado. Si no lo ves, mira Ajustes del Sistema → Notificaciones → {browser}.":
+    "Test notification sent. If you don't see it, check System Settings → Notifications → {browser}.",
+  "El navegador tiene bloqueadas las notificaciones de Pizarro. Permítelas en la configuración del sitio (el candado junto a la dirección) y vuelve a marcar la casilla.":
+    "The browser has Pizarro's notifications blocked. Allow them in the site settings (the padlock next to the address) and tick the box again.",
+  "No se han activado los avisos porque el navegador no ha recibido tu permiso. Vuelve a marcar la casilla y pulsa «Permitir».":
+    "Notifications weren't turned on because the browser didn't get your permission. Tick the box again and click “Allow”.",
+  "No se ha podido registrar el servicio de avisos del navegador. Recarga la página e inténtalo de nuevo.":
+    "The browser's notification service couldn't be registered. Reload the page and try again.",
 };
