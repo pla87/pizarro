@@ -83,14 +83,7 @@ export const documentacion: Record<string, string> = {
   "Quitó «{name}» de los fijados de Documentación": "Unpinned “{name}” in Documentation",
 
   // --- Menciones en notas y título automático (v1.77) ---
-  "Email cuando me mencionan en una nota de Documentación": "Email when I'm mentioned in a Documentation note",
   "Al momento": "Right away",
-  "En el resumen diario": "In the daily digest",
-  "No": "No",
-  "Activa el resumen diario (aquí debajo) para recibirlas: sin él no te llega ningún email de estas menciones.": "Turn on the daily digest (below) to get them: without it, you won't get any email about these mentions.",
-  "Mientras no lo elijas, sigue a tus otras casillas: en el resumen diario si lo tienes activado y, si no, como «Email cuando me mencionan». En la campana salen siempre; por Telegram y WhatsApp, no.": "Until you choose, it follows your other boxes: in the daily digest if you have it on and, if not, like “Email when I'm mentioned”. They always appear under the bell; never on Telegram or WhatsApp.",
-  "En la campana salen siempre; por Telegram y WhatsApp, no.": "They always appear under the bell; never on Telegram or WhatsApp.",
-  "los emails de menciones en notas de Documentación": "emails about mentions in Documentation notes",
   "Te han mencionado en notas": "You were mentioned in notes",
   "{n} menciones": "{n} mentions",
   "Abrir la nota": "Open the note",
