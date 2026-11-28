@@ -173,10 +173,11 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
 
       {drawerOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setDrawerOpen(false)} aria-hidden />
-          {/* Cualquier enlace del menú lo cierra: el cierre por cambio de ruta no basta para los que se quedan en la
+          <div className="absolute inset-0 bg-slate-900/50 dark:bg-black/60" onClick={() => setDrawerOpen(false)} aria-hidden />
+          {/* Borde derecho y velo más oscuro en modo oscuro: sin ellos el menú se fundía con la página de detrás (R72M1).
+              Cualquier enlace del menú lo cierra: el cierre por cambio de ruta no basta para los que se quedan en la
               misma («Archivadas» es `/p/<id>?archivadas=1`, el tablero que ya se ve). */}
-          <aside id="app-drawer" ref={drawerRef} role="dialog" aria-modal="true" aria-label={t("Menú")} className="absolute top-0 left-0 flex h-dvh max-h-full w-72 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900" onClick={(e) => { if ((e.target as Element).closest?.("a[href]")) { drawerLeavingByLink.current = true; setDrawerOpen(false); } }}>
+          <aside id="app-drawer" ref={drawerRef} role="dialog" aria-modal="true" aria-label={t("Menú")} className="absolute top-0 left-0 flex h-dvh max-h-full w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900" onClick={(e) => { if ((e.target as Element).closest?.("a[href]")) { drawerLeavingByLink.current = true; setDrawerOpen(false); } }}>
             <button ref={drawerCloseRef} className="btn-icon absolute top-3 right-3" onClick={() => setDrawerOpen(false)} aria-label={t("Cerrar menú")}>
               <X size={18} />
             </button>
