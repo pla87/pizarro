@@ -33,7 +33,7 @@ export const proyectos: Record<string, string> = {
   "Con adjuntos": "With attachments",
   "Incluye los adjuntos de las tarjetas y de las releases y los archivos de Documentación. El archivo pesa más.": "Includes card and release attachments and the Documentation files. The file is larger.",
   "Sin adjuntos": "Without attachments",
-  "Solo los datos y las notas de Documentación: rápido y ligero.": "Data and Documentation notes only: fast and light.",
+  "Solo los datos y las notas de Documentación: rápido y ligero. Sin adjuntos tampoco se incluyen las imágenes de las descripciones, los comentarios, las releases ni las notas.": "Data and Documentation notes only: fast and light. Without attachments, the images in descriptions, comments, releases and notes are not included either.",
   "Alcance": "Scope",
   "Solo el tablero": "Board only",
   "Las tarjetas no archivadas, con sus subtareas y comentarios, más columnas, tipos, etiquetas y ajustes.": "Non-archived cards with their subtasks and comments, plus columns, types, labels and settings.",

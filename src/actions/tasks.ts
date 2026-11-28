@@ -18,7 +18,7 @@ import { switchKindDescription, switchKindSubtaskRows, titleWithoutKindPrefix } 
 import { andList, quotedList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
-import { COLUMN_ORDER, lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
+import { COLUMN_ORDER, lastPositionIn, lockColumns, lockTaskRows, lockTaskRowsForDelete, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { assertColumnRoom } from "@/lib/column-capacity";
@@ -1193,7 +1193,11 @@ export async function deleteTask(taskId: string) {
     // Los ficheros de sus adjuntos se conservan mientras se pueda deshacer (ver undo.ts). La base de datos quita el
     // bloqueo de las que dependían de ella (SetNull): dependentLinkOps se lo devuelve al deshacer, si siguen sin otro.
     addUndo(...(await dependentLinkOps([taskId])), ...(await snapshotTasks([taskId])));
-    await db.task.delete({ where: { id: taskId } });
+    // Filas bloqueadas antes del DELETE (ver lockTaskRowsForDelete): si otra persona la mueve a la vez, espera en vez de 40P01.
+    await db.$transaction(async (tx) => {
+      await lockTaskRowsForDelete(tx, [taskId]);
+      await tx.task.delete({ where: { id: taskId } });
+    });
     forgetTaskAttachments([taskId]);
   });
 }
@@ -1214,7 +1218,11 @@ export async function deleteTasks(taskIds: string[]) {
     addUndo(...(await dependentLinkOps(ids)), ...(await snapshotTasks(ids)));
     const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
     describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: cutText(titles.map((t) => `«${mentionsToPlain(t.title)}»`).join(", "), 600) }, { taskIds: ids });
-    await db.task.deleteMany({ where: { id: { in: ids } } });
+    // Filas bloqueadas en orden de id antes del DELETE (ver lockTaskRowsForDelete): borrar a la vez que otra persona las mueve no interbloquea (40P01).
+    await db.$transaction(async (tx) => {
+      await lockTaskRowsForDelete(tx, ids);
+      await tx.task.deleteMany({ where: { id: { in: ids } } });
+    });
     forgetTaskAttachments(ids);
     return { deleted: ids.length };
   });
@@ -1725,7 +1733,10 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
         await tx.taskAttachment.create({ data: { ...r, taskId: id, createdById: creator, createdAt: new Date(r.createdAt) } });
       }
       // Sus ficheros se conservan: la instantánea de la entrada de deshacer los retiene.
-      if (spawned.length) await tx.task.deleteMany({ where: { id: { in: spawned }, projectId, recurrenceFromId: id } });
+      if (spawned.length) {
+        await lockTaskRowsForDelete(tx, spawned);
+        await tx.task.deleteMany({ where: { id: { in: spawned }, projectId, recurrenceFromId: id } });
+      }
       if (!createdHere.length) return [];
       const unused = await tx.label.findMany({ where: { id: { in: createdHere }, projectId, tasks: { none: {} } }, select: { id: true, projectId: true, name: true, color: true } });
       if (unused.length) await tx.label.deleteMany({ where: { id: { in: unused.map((l) => l.id) }, tasks: { none: {} } } });

@@ -3,6 +3,7 @@ import { db } from "./db";
 import { forgetReleaseNumbers } from "./release-number";
 import { revokeProject } from "./revoke";
 import { discardProjectTransfers } from "./transfer-jobs";
+import { lockTaskRowsForDelete } from "./task-positions";
 import { discardUndo } from "./undo";
 import { removeAttachmentFiles, removeDocumentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
@@ -15,7 +16,16 @@ export async function purgeProject(projectId: string): Promise<void> {
   const releaseAttachments = await db.releaseAttachment.findMany({ where: { release: { projectId } }, select: { id: true } });
   // La documentación del proyecto también cae en cascada: sus ficheros se borran con el resto.
   const documents = await db.projectDocument.findMany({ where: { projectId }, select: { id: true } });
-  await db.$transaction([db.task.deleteMany({ where: { projectId } }), db.project.delete({ where: { id: projectId } })]);
+  await db.$transaction(
+    async (tx) => {
+      // Sus tareas, bloqueadas en orden de id antes del DELETE: si alguien las mueve a la vez, espera en vez de 40P01.
+      const ids = (await tx.task.findMany({ where: { projectId }, select: { id: true }, orderBy: { id: "asc" } })).map((t) => t.id);
+      await lockTaskRowsForDelete(tx, ids);
+      await tx.task.deleteMany({ where: { projectId } });
+      await tx.project.delete({ where: { id: projectId } });
+    },
+    { timeout: 60_000 },
+  );
   revokeProject(projectId);
   await forgetReleaseNumbers(projectId);
   await removeAttachmentFiles(attachments.map((a) => a.id));

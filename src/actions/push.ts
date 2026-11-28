@@ -107,15 +107,17 @@ export async function savePushPrefs(prefs: z.input<typeof prefsSchema>) {
 }
 
 /**
- * «Probar»: un aviso de prueba al dispositivo desde el que se pulsa (`hash` = huella de su suscripción) o, sin ella, a
- * todos los de la persona. Con el tope de las pruebas de Telegram y WhatsApp.
+ * «Probar»: un aviso de prueba al dispositivo desde el que se pulsa (`hash` = huella de su suscripción, obligatoria: sin
+ * una huella válida, o si no es de un dispositivo de quien pulsa, pide activar primero los avisos aquí). Con el tope de
+ * las pruebas de Telegram y WhatsApp.
  */
 export async function testPush(input?: { hash?: string }) {
   return runAction({ name: "profile.testPush", args: [] }, async () => {
     const user = await requireUser();
     if (!rateLimit(`messaging:mytest:${user.id}`, 5, 10 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.", 429);
     const t = await getT();
-    const onlyHash = typeof input?.hash === "string" && /^[0-9a-f]{64}$/.test(input.hash) ? input.hash : undefined;
+    const onlyHash = typeof input?.hash === "string" && /^[0-9a-f]{64}$/.test(input.hash) ? input.hash : null;
+    if (!onlyHash) throw new AppError("Activa primero los avisos en este dispositivo.");
     const r = await sendPushToUser(user, pushTestMessage(t, await pushIcon()), { test: true, onlyHash });
     if (!r.sent && !r.failed && !r.expired) throw new AppError("Activa primero los avisos en este dispositivo.");
     describeAction("Probó sus avisos push", { sent: r.sent, failed: r.failed, expired: r.expired });

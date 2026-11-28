@@ -907,7 +907,10 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         }
         case "task.remove": {
           const atts = await db.taskAttachment.findMany({ where: { taskId: op.id }, select: { id: true } });
-          const { count } = await db.task.deleteMany({ where: { id: op.id, projectId } });
+          const { count } = await db.$transaction(async (tx) => {
+            await lockTaskRowsForDelete(tx, [op.id]);
+            return tx.task.deleteMany({ where: { id: op.id, projectId } });
+          });
           if (!count) miss++;
           else {
             filesToRemove.push(...atts.map((a) => a.id));

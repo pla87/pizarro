@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
-import { archiveTask, archiveTasks, deleteSubtask, deleteTasks, getArchivedTasks, makeEvergreen, moveTask, reorderSubtask, restoreTask, updateSubtask } from "../../src/actions/tasks";
+import { archiveTask, archiveTasks, deleteSubtask, deleteTask, deleteTasks, getArchivedTasks, makeEvergreen, moveTask, moveTasks, reorderSubtask, restoreTask, updateSubtask } from "../../src/actions/tasks";
 
 describe("subtareas de tareas archivadas", () => {
   test("no se pueden editar, reordenar ni borrar", async () => {
@@ -130,5 +130,45 @@ describe("archivar, mover y recuperar a la vez", () => {
     expectFail(await pending!, /no está archivada/);
     const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
     assert.deepEqual([row.archivedAt, row.columnId, row.position], [null, f.columns.todo, 777]);
+  });
+});
+
+describe("borrar tareas mientras otra persona las mueve", () => {
+  test("deleteTask y deleteTasks esperan a la fila bloqueada y borran después", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const [a, b, c] = [await makeTask(f), await makeTask(f), await makeTask(f)];
+    let one: ReturnType<typeof deleteTask> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.task.update({ where: { id: a.id }, data: { title: "movida" }, select: { id: true } });
+      one = deleteTask(a.id);
+      await waitForLockWaiter();
+      assert.equal(await db.task.count({ where: { id: a.id } }), 1, "sigue ahí mientras espera");
+    }, { timeout: 10_000 });
+    expectOk(await one!);
+    assert.equal(await db.task.count({ where: { id: a.id } }), 0);
+    let many: ReturnType<typeof deleteTasks> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.task.update({ where: { id: c.id }, data: { title: "movida" }, select: { id: true } });
+      many = deleteTasks([b.id, c.id]);
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    assert.equal(expectOk(await many!).deleted, 2);
+    assert.equal(await db.task.count({ where: { projectId: f.project.id } }), 0);
+  });
+
+  test("borrar varias a la vez que otra persona las mueve: nunca interbloqueo (40P01)", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    for (let round = 0; round < 4; round++) {
+      const tasks = [];
+      for (let i = 0; i < 12; i++) tasks.push(await makeTask(f));
+      const ids = tasks.map((t) => t.id);
+      const results = await Promise.all([deleteTasks([...ids].reverse()), moveTasks(ids, f.columns.doing), deleteTasks(ids)]);
+      for (const r of results) if (!r.ok) assert.doesNotMatch(r.error, /40P01|deadlock|interbloqueo/i, r.error);
+      assert.equal(await db.task.count({ where: { id: { in: ids } } }), 0);
+    }
   });
 });
