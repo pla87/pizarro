@@ -164,3 +164,110 @@ test("cabeceras: un JWT ya firmado (guardado por servicio) se reutiliza tal cual
   checkVapid(h.Authorization, "https://web.push.apple.com", 1_800_000_000);
   assert.equal(core.PUSH_TIMEOUT_MS, 5_000);
 });
+
+// --- service worker, icono de la barra de estado y renovación ---
+
+/** Carga public/sw.js en un `self` falso y devuelve sus oyentes y lo que hizo (notificaciones y peticiones). */
+async function loadWorker(opts: { fetchOk?: boolean } = {}) {
+  const { readFileSync } = await import("node:fs");
+  const { runInNewContext } = await import("node:vm");
+  const listeners: Record<string, (e: unknown) => void> = {};
+  const shown: { title: string; options: Record<string, unknown> }[] = [];
+  const requests: { url: string; init?: { method?: string; body?: string } }[] = [];
+  const subscribed: unknown[] = [];
+  const self = {
+    location: { origin: "https://pizarro.example.com" },
+    addEventListener: (name: string, fn: (e: unknown) => void) => (listeners[name] = fn),
+    skipWaiting: () => {},
+    clients: { claim: () => {} },
+    registration: {
+      showNotification: (title: string, options: Record<string, unknown>) => (shown.push({ title, options }), Promise.resolve()),
+      pushManager: {
+        getSubscription: async () => null,
+        subscribe: async (o: unknown) => (subscribed.push(o), { endpoint: "https://fcm.googleapis.com/fcm/send/nuevo", toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/nuevo", keys: { p256dh: "P", auth: "A" } }) }),
+      },
+    },
+  };
+  const ctx = {
+    self, URL, TextEncoder, Uint8Array, Array, JSON, Promise, atob, crypto: globalThis.crypto, Boolean, String,
+    fetch: async (url: string, init?: { method?: string; body?: string }) => (requests.push({ url, init }), { ok: opts.fetchOk ?? true, json: async () => ({ publicKey: "BAAA" }) }),
+  };
+  runInNewContext(readFileSync(new URL("../public/sw.js", import.meta.url), "utf8"), ctx);
+  const waited: Promise<unknown>[] = [];
+  const fire = (name: string, extra: Record<string, unknown> = {}) => listeners[name]!({ waitUntil: (p: Promise<unknown>) => waited.push(p), ...extra });
+  return { fire, shown, requests, subscribed, settle: () => Promise.all(waited) };
+}
+
+test("service worker: el badge es la silueta monocroma, con vibración corta y renotify solo con tag", async () => {
+  const w = await loadWorker();
+  w.fire("push", { data: { json: () => ({ title: "T", body: "B", url: "/p/x", tag: "n1", icon: "/app-icon/blue/icon-192.png" }) } });
+  w.fire("push", { data: { json: () => ({ title: "Sin tag", body: "" }) } });
+  await w.settle();
+  const [withTag, noTag] = w.shown;
+  assert.equal(withTag!.options.badge, "/push-badge.png");
+  assert.equal(withTag!.options.icon, "/app-icon/blue/icon-192.png");
+  assert.deepEqual(Array.from(withTag!.options.vibrate as number[]), [120, 60, 120]);
+  assert.equal(withTag!.options.renotify, true);
+  assert.equal(noTag!.options.renotify, false, "renotify sin tag lanza TypeError en el navegador");
+  assert.equal(noTag!.options.icon, "/icon.png");
+});
+
+test("public/push-badge.png: 96×96, blanco puro sobre transparente (Android solo usa el canal alfa)", async () => {
+  const sharp = (await import("sharp")).default;
+  const { data, info } = await sharp(new URL("../public/push-badge.png", import.meta.url).pathname).raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual([info.width, info.height, info.channels], [96, 96, 4]);
+  let opaque = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3]!;
+    if (a === 0) continue;
+    opaque++;
+    assert.deepEqual([data[i], data[i + 1], data[i + 2]], [255, 255, 255]);
+  }
+  assert.ok(opaque > 500 && opaque < 96 * 96 * 0.6, "tiene silueta, no un cuadrado lleno");
+  assert.equal(data[3], 0, "la esquina es transparente");
+});
+
+test("la ruta del badge no pasa por el proxy (se pide sin sesión, como icon.png)", async () => {
+  const { config } = await import("../src/proxy");
+  const re = new RegExp(`^${config.matcher[0]!}$`);
+  assert.equal(re.test("/push-badge.png"), false);
+  assert.equal(re.test("/icon.png"), false);
+  assert.equal(re.test("/api/push/renew"), true, "la renovación sí exige sesión");
+});
+
+test("pushsubscriptionchange: se suscribe con la clave de la vieja y avisa al servidor con la huella de la vieja", async () => {
+  const w = await loadWorker();
+  const oldEndpoint = "https://fcm.googleapis.com/fcm/send/viejo";
+  const key = new Uint8Array([4, 1, 2, 3]);
+  w.fire("pushsubscriptionchange", { oldSubscription: { endpoint: oldEndpoint, options: { applicationServerKey: key.buffer } }, newSubscription: null });
+  await w.settle();
+  assert.equal(w.subscribed.length, 1);
+  const opts = w.subscribed[0] as { userVisibleOnly: boolean; applicationServerKey: ArrayBuffer };
+  assert.equal(opts.userVisibleOnly, true);
+  assert.deepEqual(Array.from(new Uint8Array(opts.applicationServerKey)), [4, 1, 2, 3]);
+  assert.equal(w.requests.length, 1);
+  const [req] = w.requests;
+  assert.equal(req!.url, "/api/push/renew");
+  assert.equal(req!.init?.method, "POST");
+  const { createHash } = await import("node:crypto");
+  assert.deepEqual(JSON.parse(req!.init!.body!), { oldHash: createHash("sha256").update(oldEndpoint).digest("hex"), endpoint: "https://fcm.googleapis.com/fcm/send/nuevo", keys: { p256dh: "P", auth: "A" } });
+});
+
+test("pushsubscriptionchange: sin la suscripción vieja no se sabe cuál cambiar (lo hace la página) y un fallo no rompe el worker", async () => {
+  const w = await loadWorker();
+  w.fire("pushsubscriptionchange", { oldSubscription: null, newSubscription: null });
+  await w.settle();
+  assert.equal(w.requests.length, 0);
+  const failing = await loadWorker({ fetchOk: false });
+  failing.fire("pushsubscriptionchange", { oldSubscription: { endpoint: "https://fcm.googleapis.com/fcm/send/v", options: {} } });
+  await failing.settle();
+  assert.equal(failing.subscribed.length, 0, "si no hay clave pública, no se suscribe");
+});
+
+test("dónde mirar si el aviso de prueba no se ve: sistema y navegador", async () => {
+  const { notificationSettingsHint } = await import("../src/lib/push-client");
+  assert.deepEqual(notificationSettingsHint("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36"), { os: "windows", browser: "Google Chrome" });
+  assert.deepEqual(notificationSettingsHint("Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537.36 Edg/130.0"), { os: "windows", browser: "Microsoft Edge" });
+  assert.deepEqual(notificationSettingsHint("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Gecko/20100101 Firefox/130.0"), { os: "mac", browser: "Firefox" });
+  assert.equal(notificationSettingsHint("Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile Safari/537.36").os, "other");
+});

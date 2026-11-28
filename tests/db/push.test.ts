@@ -4,12 +4,14 @@
 // borrar la cuenta, envío según las preferencias por tipo, 410 = suscripción caducada, menciones en notas y «Probar».
 import assert from "node:assert/strict";
 import { after, afterEach, before, beforeEach, describe, test } from "node:test";
-import { afterDone, asUser, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { afterDone, asUser, db, expectFail, expectOk, loginAs, logout, makeProject, makeTask, makeUser } from "./helpers";
 import { fakeBrowser, fakePushServer, checkVapid, type FakeBrowser, type PushHit } from "../web-push-fake";
 
 process.env.APP_URL = "https://pizarro.example.com";
 
-const { pushSetup, removePushDevice, savePushPrefs, subscribePush, testPush, unsubscribePush } = await import("../../src/actions/push");
+const { pushSetup, removePushDevice, renewPush, savePushPrefs, subscribePush, testPush, unsubscribePush } = await import("../../src/actions/push");
+const renewRoute = await import("../../src/app/api/push/renew/route");
+const { endpointHash } = await import("../../src/lib/web-push");
 const { forgetVapidKeys, vapidKeys } = await import("../../src/lib/web-push");
 const { notifyTask } = await import("../../src/lib/notify");
 const { createNote, saveNote } = await import("../../src/actions/documents");
@@ -269,6 +271,107 @@ describe("avisos push: envío", () => {
     const [msg] = received(b);
     assert.equal(msg!.title, "Aviso de prueba de Pizarro");
     assert.equal(msg!.url, "/settings?tab=avisos");
+  });
+});
+
+describe("avisos push: «Probar» en este dispositivo y renovar la suscripción", () => {
+  test("«Probar» con la huella de este dispositivo solo escribe a ese; con una huella desconocida, pide activar primero", async () => {
+    const ana = await makeUser();
+    const phone = browser();
+    const pc = browser("wns2-par02p.notify.windows.com");
+    expectOk(await subscribe(ana, phone));
+    expectOk(await subscribe(ana, pc));
+    assert.deepEqual(expectOk(await asUser(ana, () => testPush({ hash: endpointHash(pc.endpoint) }))), { sent: 1, failed: 0, expired: 0 });
+    assert.equal(received(pc).length, 1);
+    assert.equal(received(phone).length, 0);
+    expectFail(await asUser(ana, () => testPush({ hash: endpointHash(browser().endpoint) })), /Activa primero/);
+    // La huella de otra persona no sirve para escribirle: solo se miran los dispositivos de quien pulsa.
+    const bea = await makeUser();
+    expectFail(await asUser(bea, () => testPush({ hash: endpointHash(pc.endpoint) })), /Activa primero/);
+    assert.equal(received(pc).length, 1);
+  });
+
+  test("renovar: la fila pasa al endpoint nuevo (mismo id), el viejo deja de recibir y el nuevo recibe", async () => {
+    const ana = await makeUser();
+    await loginAs(ana);
+    const before = browser();
+    const { id } = expectOk(await subscribePush({ endpoint: before.endpoint, keys: before.keys }));
+    const after = browser();
+    expectOk(await renewPush({ oldHash: endpointHash(before.endpoint), endpoint: after.endpoint, keys: after.keys }));
+    const row = await db.pushSubscription.findUniqueOrThrow({ where: { id } });
+    assert.equal(row.endpointHash, endpointHash(after.endpoint));
+    assert.equal(decryptSecret(row.endpointEnc), after.endpoint);
+    assert.equal(await db.pushSubscription.count({ where: { userId: ana.id } }), 1);
+    expectOk(await testPush());
+    assert.equal(received(after).length, 1);
+    assert.equal(received(before).length, 0);
+    // Repetirlo con la huella vieja ya no encuentra nada.
+    expectFail(await renewPush({ oldHash: endpointHash(before.endpoint), endpoint: after.endpoint, keys: after.keys }), /ya no está/);
+  });
+
+  test("renovar solo sustituye una suscripción propia de esta sesión", async () => {
+    const ana = await makeUser();
+    const mallory = await makeUser();
+    await loginAs(ana);
+    const mine = browser();
+    expectOk(await subscribePush({ endpoint: mine.endpoint, keys: mine.keys }));
+    const oldHash = endpointHash(mine.endpoint);
+    const evil = browser();
+    // Otra persona con la huella de Ana: nada.
+    await loginAs(mallory);
+    expectFail(await renewPush({ oldHash, endpoint: evil.endpoint, keys: evil.keys }), /ya no está/);
+    // Otra sesión de la misma persona: tampoco (la suscripción es de la sesión que la hizo).
+    await loginAs(ana);
+    expectFail(await renewPush({ oldHash, endpoint: evil.endpoint, keys: evil.keys }), /ya no está/);
+    // Huella mal formada o inventada.
+    expectFail(await renewPush({ oldHash: "x", endpoint: evil.endpoint, keys: evil.keys }), /ya no está/);
+    expectFail(await renewPush({ oldHash: "0".repeat(64), endpoint: evil.endpoint, keys: evil.keys }), /ya no está/);
+    const row = await db.pushSubscription.findFirstOrThrow({ where: { userId: ana.id } });
+    assert.equal(row.endpointHash, oldHash);
+    assert.equal(await db.pushSubscription.count({ where: { endpointHash: endpointHash(evil.endpoint) } }), 0);
+  });
+
+  test("renovar: servicio fuera de la lista o claves no válidas no cambian nada; el endpoint de otra persona exige sus claves", async () => {
+    const ana = await makeUser();
+    const bea = await makeUser();
+    const theirs = browser();
+    expectOk(await subscribe(bea, theirs));
+    await loginAs(ana);
+    const mine = browser();
+    expectOk(await subscribePush({ endpoint: mine.endpoint, keys: mine.keys }));
+    const oldHash = endpointHash(mine.endpoint);
+    expectFail(await renewPush({ oldHash, endpoint: "https://169.254.169.254/x", keys: mine.keys }), /no admite/);
+    expectFail(await renewPush({ oldHash, endpoint: browser().endpoint, keys: { p256dh: "AAAA", auth: mine.keys.auth } }), /no válida/);
+    // Apuntar al endpoint de Bea con claves inventadas: no se lo quita.
+    expectFail(await renewPush({ oldHash, endpoint: theirs.endpoint, keys: fakeBrowser().keys }), /no válida/);
+    assert.equal(await db.pushSubscription.count({ where: { userId: bea.id } }), 1);
+    assert.equal((await db.pushSubscription.findFirstOrThrow({ where: { userId: ana.id } })).endpointHash, oldHash);
+  });
+
+  test("ruta /api/push/renew (service worker): mismo origen y sesión; con una huella ajena, 404 sin tocar nada", async () => {
+    const ana = await makeUser();
+    await loginAs(ana);
+    const before = browser();
+    expectOk(await subscribePush({ endpoint: before.endpoint, keys: before.keys }));
+    const after = browser();
+    const body = JSON.stringify({ oldHash: endpointHash(before.endpoint), endpoint: after.endpoint, keys: after.keys });
+    const post = (init: { origin?: string; body?: string }) =>
+      renewRoute.POST(new Request("https://pizarro.example.com/api/push/renew", { method: "POST", headers: { ...(init.origin ? { origin: init.origin } : {}), host: "pizarro.example.com", "content-type": "application/json", "user-agent": "pizarro-db-tests" }, body: init.body ?? body }));
+    // Sin origen o de otro: 403.
+    assert.equal((await post({})).status, 403);
+    assert.equal((await post({ origin: "https://evil.example" })).status, 403);
+    assert.equal((await post({ origin: "https://pizarro.example.com", body: "{" })).status, 400);
+    assert.equal((await post({ origin: "https://pizarro.example.com", body: JSON.stringify({ oldHash: "0".repeat(64), endpoint: after.endpoint, keys: after.keys }) })).status, 404);
+    assert.equal((await db.pushSubscription.findFirstOrThrow({ where: { userId: ana.id } })).endpointHash, endpointHash(before.endpoint));
+    assert.equal((await post({ origin: "https://pizarro.example.com" })).status, 200);
+    assert.equal((await db.pushSubscription.findFirstOrThrow({ where: { userId: ana.id } })).endpointHash, endpointHash(after.endpoint));
+    // La clave pública, para suscribirse desde el service worker.
+    const key = await (await renewRoute.GET()).json();
+    assert.equal(key.publicKey, (await vapidKeys()).publicKey);
+    // Sin sesión: 401 (también la clave).
+    logout();
+    assert.equal((await post({ origin: "https://pizarro.example.com" })).status, 401);
+    assert.equal((await renewRoute.GET()).status, 401);
   });
 });
 

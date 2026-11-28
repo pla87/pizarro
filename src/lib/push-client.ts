@@ -50,7 +50,53 @@ export async function currentPushSubscription(): Promise<PushSubscription | null
  * esta cuenta). El servicio push responde 410 al siguiente envío y el servidor borra la suscripción.
  */
 export function forgetPushOnThisDevice(): void {
+  rememberPushHash(null);
   currentPushSubscription()
     .then((s) => s?.unsubscribe())
     .catch(() => {});
+}
+
+// --- Qué suscripción se guardó en este navegador ---
+
+const HASH_KEY = "pz-push-hash";
+
+/** Huella de la suscripción con la que este navegador activó los avisos (null: ninguna). Solo para detectar que el navegador la cambió. */
+export function rememberedPushHash(): string | null {
+  try {
+    return localStorage.getItem(HASH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function rememberPushHash(hash: string | null): void {
+  try {
+    if (hash) localStorage.setItem(HASH_KEY, hash);
+    else localStorage.removeItem(HASH_KEY);
+  } catch {
+    // Sin almacenamiento (ventana privada): no se puede resincronizar sola, solo desde Mi perfil.
+  }
+}
+
+/** Registra el service worker y espera a que esté activo (con tiempo máximo: si el registro falla, `ready` no acaba nunca). */
+export async function pushWorkerReady(timeoutMs = 10_000): Promise<ServiceWorkerRegistration> {
+  await navigator.serviceWorker.register("/sw.js");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("service worker timeout")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Sistema y navegador, para decir dónde mirar si el aviso de prueba no se ve (los permisos del sistema lo bloquean aunque el navegador lo tenga permitido). */
+export function notificationSettingsHint(ua: string): { os: "windows" | "mac" | "other"; browser: string } {
+  const browser = /edg\//i.test(ua) ? "Microsoft Edge" : /firefox\//i.test(ua) ? "Firefox" : /opr\//i.test(ua) ? "Opera" : "Google Chrome";
+  const os = /windows/i.test(ua) ? "windows" : /macintosh|mac os x/i.test(ua) && !/mobile/i.test(ua) ? "mac" : "other";
+  return { os, browser };
 }

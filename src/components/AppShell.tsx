@@ -18,6 +18,7 @@ import type { FeedbackStatus } from "@/lib/feedback-core";
 import { onUnreadCount } from "@/lib/unread-core";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
+import { PushResync } from "./PushResync";
 import { LicenseNudge } from "./LicenseNudge";
 import { FeedbackButton, FeedbackProvider } from "./feedback/Feedback";
 import { clearDraftsOnLogout } from "./board/drafts";
@@ -81,6 +82,7 @@ export function AppShell(props: Props) {
       <ConfirmProvider>
         <PromptProvider>
           <TransferJobWatcher />
+          <PushResync />
           <ConnectionNotice />
           <Shell {...props} />
         </PromptProvider>
