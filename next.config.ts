@@ -101,7 +101,7 @@ const nextConfig: NextConfig = {
           // Aísla la pestaña de las ventanas que abra o que la abran desde otro sitio (no puede manipularla). El acceso
           // con Google va por redirección (no por ventana emergente), así que no le afecta.
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
           ...(isDev ? [] : [{ key: "Strict-Transport-Security", value: "max-age=31536000" }]),
         ],
       },

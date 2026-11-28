@@ -262,12 +262,15 @@ describe("avisos push: envío", () => {
     assert.ok((await db.notification.findFirstOrThrow({ where: { documentId: note.id, userId: bea.id } })).pushSentAt);
   });
 
-  test("«Probar» manda un aviso de prueba a cada dispositivo; sin dispositivos, lo dice", async () => {
+  test("«Probar» exige la huella de este dispositivo: sin ella (o sin dispositivos), pide activar primero", async () => {
     const ana = await makeUser();
     expectFail(await asUser(ana, () => testPush()), /Activa primero/);
     const b = browser();
     expectOk(await subscribe(ana, b));
-    assert.deepEqual(expectOk(await asUser(ana, () => testPush())), { sent: 1, failed: 0, expired: 0 });
+    expectFail(await asUser(ana, () => testPush()), /Activa primero/);
+    expectFail(await asUser(ana, () => testPush({ hash: "no-es-una-huella" })), /Activa primero/);
+    assert.equal(received(b).length, 0, "sin huella no se prueba a todos");
+    assert.deepEqual(expectOk(await asUser(ana, () => testPush({ hash: endpointHash(b.endpoint) }))), { sent: 1, failed: 0, expired: 0 });
     const [msg] = received(b);
     assert.equal(msg!.title, "Aviso de prueba de Pizarro");
     assert.equal(msg!.url, "/settings?tab=avisos");
@@ -302,7 +305,7 @@ describe("avisos push: «Probar» en este dispositivo y renovar la suscripción"
     assert.equal(row.endpointHash, endpointHash(after.endpoint));
     assert.equal(decryptSecret(row.endpointEnc), after.endpoint);
     assert.equal(await db.pushSubscription.count({ where: { userId: ana.id } }), 1);
-    expectOk(await testPush());
+    expectOk(await testPush({ hash: endpointHash(after.endpoint) }));
     assert.equal(received(after).length, 1);
     assert.equal(received(before).length, 0);
     // Repetirlo con la huella vieja ya no encuentra nada.
