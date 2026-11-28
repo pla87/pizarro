@@ -234,7 +234,7 @@ test("avisos: email por tipo y preferencias", () => {
   assert.match(unsub.text, /\nDejar de recibir estos emails: https:\/\/a\.b\/unsubscribe\/mX\.y\nNo respondas/);
   assert.match(unsub.html, /<a href="https:\/\/a\.b\/unsubscribe\/mX\.y"[^>]*>Dejar de recibir estos emails<\/a>/);
   assert.doesNotMatch(mentionEmail({ ...msg, type: "MENTION" }).text, /Dejar de recibir/);
-  const prefs = { notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: true, notifyCommentEmail: false };
+  const prefs = { emailNotices: true, notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: true, notifyCommentEmail: false, notifyAdminEmail: true, dailyDigest: false };
   assert.equal(emailWanted("MENTION", prefs), true);
   assert.equal(emailWanted("ASSIGNED", prefs), false);
   assert.equal(emailWanted("DUE_CHANGED", prefs), true);
@@ -243,7 +243,19 @@ test("avisos: email por tipo y preferencias", () => {
   // Los recordatorios de «Esperando» van con las fechas límite (como en Telegram y WhatsApp), no con las menciones.
   assert.equal(emailWanted("WAITING", prefs), true);
   assert.equal(emailWanted("WAITING", { ...prefs, notifyEmail: true, notifyDueEmail: false }), false);
-  assert.equal(emailWanted("PROJECT_TO_TEAM", { ...prefs, notifyEmail: false }), false);
+  // Administración (v1.79): su propia casilla, no la de las menciones; siempre al momento.
+  const admin = ["PROJECT_TO_TEAM", "REPORT_UNSUBSCRIBED", "SHARE_REVOKED"] as const;
+  for (const type of admin) {
+    assert.equal(emailWanted(type, { ...prefs, notifyEmail: false }), true, type);
+    assert.equal(emailWanted(type, { ...prefs, notifyAdminEmail: false }), false, type);
+    assert.equal(emailWanted(type, { ...prefs, dailyDigest: true }), true, type);
+  }
+  // Con «Resumen diario», lo de proyectos marcado va en el resumen y no al momento.
+  const digest = { ...prefs, dailyDigest: true, notifyAssignedEmail: true, notifyCommentEmail: true };
+  for (const type of ["MENTION", "ASSIGNED", "DUE_CHANGED", "WAITING", "COMMENT", "REPLY"] as const) assert.equal(emailWanted(type, digest), false, type);
+  // Casilla principal apagada: nada, ni administración.
+  const all = { ...prefs, notifyAssignedEmail: true, notifyCommentEmail: true, emailNotices: false };
+  for (const type of ["MENTION", "ASSIGNED", "DUE_CHANGED", "WAITING", "COMMENT", "REPLY", ...admin] as const) assert.equal(emailWanted(type, all), false, type);
 });
 
 // --- Menciones en el título ---

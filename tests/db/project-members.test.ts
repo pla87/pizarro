@@ -180,9 +180,9 @@ describe("aviso por email al añadir a alguien a un proyecto", () => {
     assert.equal(self.emailed, false);
     assert.equal((await mailsTo(admin.email)).length, 0);
 
-    // Con los avisos por email de menciones (y administración) desactivados, tampoco.
+    // Con los emails de administración desactivados, tampoco.
     const quiet = await makeUser();
-    await db.user.update({ where: { id: quiet.id }, data: { notifyEmail: false } });
+    await db.user.update({ where: { id: quiet.id }, data: { notifyAdminEmail: false } });
     assert.equal(expectOk(await addProjectMember(f.project.id, quiet.id)).emailed, false);
     assert.equal((await mailsTo(quiet.email)).length, 0);
     await flushLogs();

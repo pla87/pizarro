@@ -11,7 +11,6 @@ import { ellipsize } from "./graphemes";
 import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "./mentions";
-import { noteMentionEmailMode } from "./note-mention-pref";
 import { noticeActorName, notificationHeadline, projectNoticeActor, projectNoticePath, quotesWriting, shareRevokedExcerpt, shareRevokedParts, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
@@ -89,13 +88,31 @@ function projectNoticeMessage(n: { type: NotificationKind; excerpt: string; proj
   };
 }
 
+/** Casillas de email de una persona que decide emailWanted (Mi perfil → Avisos → Notificaciones por email). */
+export type EmailPrefs = {
+  /** Casilla principal: apagada, no sale ningún email de avisos. */
+  emailNotices: boolean;
+  notifyEmail: boolean;
+  notifyAssignedEmail: boolean;
+  notifyDueEmail: boolean;
+  notifyCommentEmail: boolean;
+  notifyAdminEmail: boolean;
+  /** Frecuencia de los emails sobre proyectos: true = en el resumen diario, no al momento. */
+  dailyDigest: boolean;
+};
+
 /**
- * ¿Quiere esta persona el email de este tipo de aviso? (en la app se crean siempre). Grupos en noticeEmailKind: los
- * recordatorios de «Esperando» van con las fechas límite (como en Telegram y WhatsApp, channelWants; hasta la v1.63
- * salían con «Avisos de menciones») y los de administración (un proyecto pasa a ser de equipo), con las menciones.
+ * ¿Sale ahora, al momento, el email de este tipo de aviso? (en la app se crean siempre). Casilla principal apagada: ninguno.
+ * Los de administración (noticeEmailKind «admin») salen siempre al momento si su casilla está marcada. Los demás, solo si
+ * la frecuencia es «Al momento» y está marcada la casilla de su grupo; con «Resumen diario» van en el resumen (gatherDigest).
+ * Los recordatorios de «Esperando» van con las fechas límite (como en Telegram y WhatsApp, channelWants) y las menciones
+ * en notas, con las de tareas.
  */
-export function emailWanted(type: NotificationKind, u: { notifyEmail: boolean; notifyAssignedEmail: boolean; notifyDueEmail: boolean; notifyCommentEmail: boolean }): boolean {
-  return u[EMAIL_PREF_FIELD[noticeEmailKind(type)]];
+export function emailWanted(type: NotificationKind, u: EmailPrefs): boolean {
+  if (!u.emailNotices) return false;
+  const kind = noticeEmailKind(type);
+  if (kind === "admin") return u.notifyAdminEmail;
+  return !u.dailyDigest && u[EMAIL_PREF_FIELD[kind]];
 }
 
 /**
@@ -110,7 +127,8 @@ function externalWanted(type: NotificationKind, u: Parameters<typeof emailWanted
 
 const CHANNEL_SELECT = { channel: true, address: true, verifiedAt: true, consentAt: true, notifyMention: true, notifyAssigned: true, notifyDue: true, notifyComment: true } as const;
 /** Preferencias de envío externo de una persona: email por tipo, sus canales y sus avisos push. */
-const EXTERNAL_PREFS_SELECT = { notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT }, ...PUSH_USER_SELECT } as const;
+const EMAIL_PREFS_SELECT = { emailNotices: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, notifyAdminEmail: true, dailyDigest: true } as const;
+const EXTERNAL_PREFS_SELECT = { ...EMAIL_PREFS_SELECT, channels: { select: CHANNEL_SELECT }, ...PUSH_USER_SELECT } as const;
 type ChannelRow = { channel: "TELEGRAM" | "WHATSAPP"; address: string; verifiedAt: Date | null; consentAt: Date | null } & ChannelPrefs;
 
 /** Canales por los que puede salir este aviso ahora: activados por el administrador, conectados y queridos para este tipo. */
@@ -131,7 +149,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
       id: true,
       type: true,
       excerpt: true,
-      user: { select: { id: true, name: true, email: true, locale: true, active: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true, noteMentionEmail: true, channels: { select: CHANNEL_SELECT }, ...PUSH_USER_SELECT } },
+      user: { select: { id: true, name: true, email: true, locale: true, active: true, ...EMAIL_PREFS_SELECT, channels: { select: CHANNEL_SELECT }, ...PUSH_USER_SELECT } },
       actor: { select: { name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true, isPrivate: true } } } },
       project: { select: { id: true, name: true, isPrivate: true } },
@@ -283,14 +301,14 @@ async function deliverPush(
 }
 
 /**
- * Email de una mención en una nota (deliver), si la persona lo quiere al momento (noteMentionEmailMode), y aviso push si
+ * Email de una mención en una nota (deliver), si la persona lo quiere al momento (emailWanted: menciones marcadas y frecuencia «Al momento»), y aviso push si
  * tiene marcadas las menciones para push, mientras la nota siga fuera de la papelera. El email lleva su propio enlace de
- * baja («note»: pone la opción en «No»). Sin Telegram ni WhatsApp: el texto de una nota se guarda solo cada pocos
+ * baja (el de las menciones). Sin Telegram ni WhatsApp: el texto de una nota se guarda solo cada pocos
  * segundos y WhatsApp cuesta dinero; en la campana sale siempre. El push es gratis y ya tiene su tope por persona y
  * hora (y notifyNoteMentions no repite el aviso de la misma nota en 10 minutos).
  */
 async function deliverNoteMention(
-  n: { id: string; type: NotificationKind; excerpt: string; actor: { name: string } | null; document: { id: string; name: string; deletedAt: Date | null }; user: { id: string; name: string; email: string; notifyEmail: boolean; dailyDigest: boolean; noteMentionEmail: string | null } & Parameters<typeof pushWanted>[1] },
+  n: { id: string; type: NotificationKind; excerpt: string; actor: { name: string } | null; document: { id: string; name: string; deletedAt: Date | null }; user: { id: string; name: string; email: string } & EmailPrefs & Parameters<typeof pushWanted>[1] },
   project: { id: string; name: string },
   locale: Locale,
   t: T,
@@ -311,10 +329,10 @@ async function deliverNoteMention(
   const update: { emailSentAt?: Date; pushSentAt?: Date; deliveryError?: string } = {};
   const errors: string[] = [];
   const pushing = deliverPush({ id: n.id, type: n.type, user: n.user }, msg, t, project.id, null, update, errors);
-  if (emailEnabled() && noteMentionEmailMode(n.user) === "NOW") {
+  if (emailEnabled() && emailWanted("MENTION", n.user)) {
     const t0 = performance.now();
     try {
-      const unsub = unsubscribeLinks("note", n.user.id, n.user.email);
+      const unsub = unsubscribeLinks("mention", n.user.id, n.user.email);
       await sendMail({ to: n.user.email, ...mentionEmail(msg, t, { unsubscribeUrl: unsub.page }), headers: unsub.headers });
       update.emailSentAt = new Date();
       logEvent({ ...base, action: "notify.email", label: { k: "Email de mención en una nota enviado a {name}", p: { name: n.user.name } }, durationMs: performance.now() - t0, details });
@@ -336,7 +354,7 @@ async function deliverNoteMention(
 /**
  * Avisos de las menciones NUEVAS de una nota de Documentación al guardarla (saveNoteRow): quien aparece en `after` y no
  * en `before`, sin quien escribe, activo y con acceso al proyecto. En la campana siempre (enlaza a la nota); por email
- * según su opción de Mi perfil (al momento, en el resumen diario o no). Para no avisar de más con el guardado automático
+ * según «Menciones en tareas y notas» y la frecuencia de sus emails (al momento o en el resumen diario). Para no avisar de más con el guardado automático
  * (cada pocos segundos), a la misma persona por la misma nota no se le crea otro aviso en 10 minutos (quitar y volver a
  * poner una mención mientras se escribe no avisa dos veces). El extracto es el párrafo de la mención. Devuelve a quién avisa.
  */
@@ -346,7 +364,7 @@ export async function notifyNoteMentions(opts: { actorId: string; documentId: st
   if (!ids.length) return [];
   const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { isPrivate: true } });
   if (!project) return [];
-  const people = await db.user.findMany({ where: mentionRecipientsWhere(project, ids, opts.projectId), select: { id: true, notifyEmail: true, dailyDigest: true, noteMentionEmail: true, ...PUSH_USER_SELECT } });
+  const people = await db.user.findMany({ where: mentionRecipientsWhere(project, ids, opts.projectId), select: { id: true, ...EMAIL_PREFS_SELECT, ...PUSH_USER_SELECT } });
   if (!people.length) return [];
   const recent = await db.notification.findMany({
     where: { documentId: opts.documentId, type: "MENTION", userId: { in: people.map((p) => p.id) }, createdAt: { gte: new Date(Date.now() - DEDUPE_MINUTES * 60_000) } },
@@ -360,7 +378,7 @@ export async function notifyNoteMentions(opts: { actorId: string; documentId: st
     select: { id: true, userId: true },
   });
   // Email al momento o aviso push, con el tope por hora de quien escribe (como los demás avisos que provoca una persona).
-  const now = new Set(fresh.filter((p) => (emailEnabled() && noteMentionEmailMode(p) === "NOW") || pushWanted("MENTION", p)).map((p) => p.id));
+  const now = new Set(fresh.filter((p) => (emailEnabled() && emailWanted("MENTION", p)) || pushWanted("MENTION", p)).map((p) => p.id));
   const toDeliver = created.filter((c) => now.has(c.userId) && rateLimit(`notify:${opts.actorId}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)).map((c) => c.id);
   logEvent({
     category: "notify", action: "notify.note_mention", label: { k: "{n} aviso(s) de mención en una nota creados ({external} con envío externo al momento)", p: { n: created.length, external: toDeliver.length } },

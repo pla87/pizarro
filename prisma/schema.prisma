@@ -72,6 +72,13 @@ model User {
   /// "OFF". Texto y no enum, para no añadir valores de enum que escribir en la misma versión. Null = sin elegir: sigue a
   /// las demás opciones (noteMentionEmailMode, lib/note-mention-pref.ts).
   noteMentionEmail String?
+  /// Casilla principal de «Notificaciones por email» (v1.79): apagada, no sale ningún email de avisos ni resumen (los
+  /// de cuentas —invitación, restablecer, seguridad— no dependen de ella). Las casillas de debajo se conservan.
+  emailNotices     Boolean   @default(true)
+  /// Emails de administración de Pizarro (v1.79): un proyecto privado pasa a ser de equipo, baja de un informe semanal
+  /// que configuraste, enlace de una web revocado y aviso de «te han añadido a un proyecto». Siempre al momento. Antes
+  /// iban con notifyEmail (menciones), que ahora solo es «Menciones en tareas y notas».
+  notifyAdminEmail Boolean   @default(true)
   /// Avisos push del navegador (v1.78): qué tipos salen a los dispositivos de PushSubscription (los mismos grupos que
   /// Telegram y WhatsApp, channelWants). Por defecto, menciones, asignaciones y fechas.
   pushNotifyMention  Boolean @default(true)

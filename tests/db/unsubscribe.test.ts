@@ -124,8 +124,10 @@ describe("baja en un clic", () => {
     assert.ok(header, JSON.stringify(mine[0]!.headers));
     assert.ok(mine[0]!.text.includes("Dejar de recibir estos emails: https://pizarro.example.com/unsubscribe/"));
     assert.equal((await call("POST", header[1]!, ONE_CLICK)).status, 200);
-    const row = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { dailyDigest: true, notifyEmail: true } });
-    assert.deepEqual(row, { dailyDigest: false, notifyEmail: true });
+    // La baja del resumen no pasa los emails a «Al momento» (la frecuencia sigue): desmarca los emails sobre proyectos, que
+    // son lo que trae el resumen. Los de administración no cambian.
+    const row = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { dailyDigest: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, notifyAdminEmail: true } });
+    assert.deepEqual(row, { dailyDigest: true, notifyEmail: false, notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, notifyAdminEmail: true });
   });
 
   test("informe semanal: la baja la hace su destinatario (sin cuenta) y deja de valer si cambia la dirección", async () => {

@@ -29,7 +29,6 @@ import { passwordLoginAllowed } from "@/lib/auth-policy";
 import { googlePolicyEnv } from "@/lib/google-config";
 import { parseGoogleReauthResult } from "@/lib/google-reauth";
 import { accountDeleteGoogleConfirmed } from "@/lib/two-factor";
-import { isNoteMentionEmailMode } from "@/lib/note-mention-pref";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -77,7 +76,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       notifyCommentEmail: true,
       dailyDigest: true,
       digestHour: true,
-      noteMentionEmail: true,
+      emailNotices: true,
+      notifyAdminEmail: true,
       googleAccount: { select: { email: true } },
       googleSub: true,
     },
@@ -134,9 +134,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <>
               <EmailNoticesSection
                 prefs={{
+                  emailNotices: row.emailNotices, notifyAdminEmail: row.notifyAdminEmail,
                   notifyEmail: row.notifyEmail, notifyAssignedEmail: row.notifyAssignedEmail, notifyDueEmail: row.notifyDueEmail,
                   notifyCommentEmail: row.notifyCommentEmail, dailyDigest: row.dailyDigest, digestHour: row.digestHour,
-                  noteMentionEmail: isNoteMentionEmailMode(row.noteMentionEmail) ? row.noteMentionEmail : null,
                 }}
                 emailAvailable={emailEnabled()}
                 adminNotices={user.role === "ADMIN"}
