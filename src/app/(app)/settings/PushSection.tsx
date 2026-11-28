@@ -8,14 +8,15 @@ import { useActionTransition } from "@/components/useActionTransition";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import type { ChannelPrefs } from "@/lib/messaging-core";
-import { currentPushSubscription, keyBytes, pushSupport, sameServerKey, sha256Hex, type PushSupport } from "@/lib/push-client";
+import { currentPushSubscription, keyBytes, notificationSettingsHint, pushSupport, pushWorkerReady, rememberPushHash, sameServerKey, sha256Hex, type PushSupport } from "@/lib/push-client";
+import { resyncPush } from "@/lib/push-sync";
 import type { PushView } from "@/lib/web-push";
 
 const PREF_LABELS: { key: keyof ChannelPrefs; label: string }[] = [
-  { key: "notifyMention", label: "Menciones (@), también en notas de Documentación" },
+  { key: "notifyMention", label: "Menciones (@) en tareas y notas" },
   { key: "notifyAssigned", label: "Tareas que me asignan" },
   { key: "notifyComment", label: "Comentarios y respuestas en tareas que sigo" },
-  { key: "notifyDue", label: "Cambios de fecha límite y recordatorios de «Esperando»" },
+  { key: "notifyDue", label: "Cambios de fecha límite y recordatorios" },
 ];
 
 interface DeviceState {
@@ -55,13 +56,23 @@ export function PushSection({ initial }: { initial: PushView }) {
 
   useEffect(() => {
     let alive = true;
-    probeDevice(initial.publicKey).then((d) => {
-      if (alive) setDevice(d);
-    }, () => {});
+    (async () => {
+      // Si el navegador cambió la suscripción por su cuenta, se renueva en silencio antes de mirar el estado.
+      const renewed = await resyncPush();
+      const d = await probeDevice(initial.publicKey);
+      if (!alive) return;
+      setDevice(d);
+      if (renewed) {
+        const res = await pushSetup();
+        if (alive && res.ok) setView(res.data);
+      } else if (d.hash && initial.devices.some((x) => x.hash === d.hash)) {
+        rememberPushHash(d.hash);
+      }
+    })().catch(() => {});
     return () => {
       alive = false;
     };
-  }, [initial.publicKey]);
+  }, [initial.publicKey, initial.devices]);
 
   const refresh = async () => {
     const res = await pushSetup();
@@ -75,22 +86,31 @@ export function PushSection({ initial }: { initial: PushView }) {
 
   const turnOn = () =>
     run(async () => {
-      const perm = await Notification.requestPermission();
+      let perm: NotificationPermission;
+      try {
+        perm = await Notification.requestPermission();
+      } catch {
+        perm = Notification.permission;
+      }
       setPermission(perm);
-      if (perm !== "granted") return;
+      if (perm === "denied") return toast(t("El navegador tiene bloqueadas las notificaciones de Pizarro. Permítelas en la configuración del sitio (el candado junto a la dirección) y vuelve a marcar la casilla."), "error");
+      if (perm !== "granted") return toast(t("No se han activado los avisos porque el navegador no ha recibido tu permiso. Vuelve a marcar la casilla y pulsa «Permitir»."), "error");
+      let reg: ServiceWorkerRegistration;
+      try {
+        reg = await pushWorkerReady();
+      } catch {
+        return toast(t("No se ha podido registrar el servicio de avisos del navegador. Recarga la página e inténtalo de nuevo."), "error");
+      }
       let sub: PushSubscription;
       let fresh = false;
       try {
-        await navigator.serviceWorker.register("/sw.js");
-        const reg = await navigator.serviceWorker.ready;
         const prev = await reg.pushManager.getSubscription();
         if (prev && !sameServerKey(prev, view.publicKey)) await prev.unsubscribe();
         const keep = prev && sameServerKey(prev, view.publicKey) ? prev : null;
         fresh = !keep;
         sub = keep ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(view.publicKey) }));
       } catch {
-        toast(t("El navegador no ha podido activar los avisos. Si usas Brave, activa «Usar los servicios de Google para la mensajería push» en su configuración."), "error");
-        return;
+        return toast(t("El navegador no ha podido activar los avisos. Si usas Brave, activa «Usar los servicios de Google para la mensajería push» en su configuración."), "error");
       }
       const json = sub.toJSON();
       const res = await subscribePush({ endpoint: json.endpoint ?? "", keys: { p256dh: json.keys?.p256dh ?? "", auth: json.keys?.auth ?? "" } });
@@ -99,6 +119,7 @@ export function PushSection({ initial }: { initial: PushView }) {
         toast(res.error, "error");
         return;
       }
+      rememberPushHash(await sha256Hex(sub.endpoint));
       await refresh();
       toast(t("Avisos activados en este dispositivo."), "success");
     });
@@ -111,6 +132,7 @@ export function PushSection({ initial }: { initial: PushView }) {
         if (!res.ok) return toast(res.error, "error");
         await sub.unsubscribe().catch(() => {});
       }
+      rememberPushHash(null);
       await refresh();
       toast(t("Avisos desactivados en este dispositivo."), "success");
     });
@@ -120,7 +142,10 @@ export function PushSection({ initial }: { initial: PushView }) {
       const res = await removePushDevice(id);
       if (!res.ok) toast(res.error, "error");
       // El de este navegador: también se le quita la suscripción aquí.
-      if (res.ok && hash === hereHash) await (await currentPushSubscription().catch(() => null))?.unsubscribe().catch(() => {});
+      if (res.ok && hash === hereHash) {
+        rememberPushHash(null);
+        await (await currentPushSubscription().catch(() => null))?.unsubscribe().catch(() => {});
+      }
       await refresh();
       if (res.ok) toast(t("Dispositivo quitado."), "success");
     });
@@ -133,16 +158,26 @@ export function PushSection({ initial }: { initial: PushView }) {
       toast(t("Preferencias guardadas"), "success");
     });
 
+  // «Probar» prueba ESTE dispositivo (solo si está activado aquí).
   const test = () =>
     run(async () => {
-      const res = await testPush();
+      const res = await testPush({ hash: hereHash ?? undefined });
       if (!res.ok) return toast(res.error, "error");
       const { sent, failed, expired } = res.data;
+      if (!sent || failed || expired) {
+        toast(t("No se ha podido enviar el aviso de prueba a este dispositivo. Desactiva y vuelve a activar los avisos aquí."), "error");
+        if (expired) await refresh();
+        return;
+      }
+      const { os, browser } = notificationSettingsHint(navigator.userAgent);
       toast(
-        failed || expired ? t("Aviso de prueba enviado a {sent} de {total} dispositivos.", { sent, total: sent + failed + expired }) : t("Aviso de prueba enviado. Si no lo ves, revisa los permisos de notificaciones del sistema."),
-        failed || expired ? "error" : "success",
+        os === "windows"
+          ? t("Aviso de prueba enviado. Si no lo ves, mira Configuración de Windows → Sistema → Notificaciones → {browser}.", { browser })
+          : os === "mac"
+            ? t("Aviso de prueba enviado. Si no lo ves, mira Ajustes del Sistema → Notificaciones → {browser}.", { browser })
+            : t("Aviso de prueba enviado. Si no lo ves, revisa los permisos de notificaciones del sistema."),
+        "success",
       );
-      if (expired) await refresh();
     });
 
   const note =
@@ -160,7 +195,7 @@ export function PushSection({ initial }: { initial: PushView }) {
     <section id="push" className="card space-y-4 p-5" data-testid="push-section">
       <div>
         <h2 className="flex items-center gap-2 font-semibold"><BellRing size={17} /> {t("Avisos en este dispositivo")}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">{t("Notificaciones del navegador o del móvil, aunque Pizarro esté cerrado. Gratis. Se activan en cada dispositivo y al cerrar sesión se desactivan en ese navegador.")}</p>
+        <p className="mt-0.5 text-sm text-slate-500">{t("Notificaciones del navegador o del móvil")}</p>
       </div>
       {note && <p role="status" className="text-sm text-amber-700 dark:text-amber-400" data-testid="push-note">{note}</p>}
       {support === "ok" && (
@@ -189,8 +224,9 @@ export function PushSection({ initial }: { initial: PushView }) {
           </fieldset>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-primary py-1.5" onClick={savePrefs} disabled={pending || !dirty}>{t("Guardar")}</button>
-            <button type="button" className="btn-secondary py-1.5" onClick={test} disabled={pending}>{t("Probar")}</button>
+            <button type="button" className="btn-secondary py-1.5" onClick={test} disabled={pending || !here}>{t("Probar")}</button>
           </div>
+          {!here && <p className="text-xs text-slate-500" data-testid="push-test-hint">{t("Para probar los avisos, actívalos primero en este dispositivo.")}</p>}
           <div>
             <h3 className="text-xs font-medium text-slate-500">{t("Tus dispositivos con avisos ({n} de {max})", { n: view.devices.length, max: view.maxDevices })}</h3>
             <ul className="mt-1 divide-y divide-slate-200 dark:divide-slate-800">

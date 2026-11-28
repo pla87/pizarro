@@ -10,7 +10,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { isRowId } from "@/lib/row-id";
 import { currentSessionId, requireUser } from "@/lib/session";
 import { deviceLabel } from "@/lib/user-agent";
-import { endpointHash, pushIcon, PushSubscribeError, pushView, savePushSubscription, sendPushToUser } from "@/lib/web-push";
+import { endpointHash, pushIcon, PushSubscribeError, pushView, renewPushSubscription, savePushSubscription, sendPushToUser } from "@/lib/web-push";
 import { PUSH_DEVICES_MAX } from "@/lib/web-push-core";
 import { pushTestMessage } from "@/lib/web-push-text";
 import { getT } from "@/i18n/server";
@@ -51,6 +51,30 @@ export async function subscribePush(input: { endpoint: string; keys: { p256dh: s
   });
 }
 
+/**
+ * El navegador renovó la suscripción de este dispositivo: se cambia la guardada (la de la huella `oldHash`, que tiene que
+ * ser de esta persona y de esta sesión) por la nueva. Sin registro de argumentos: llevan el endpoint y las claves.
+ */
+export async function renewPush(input: { oldHash: string; endpoint: string; keys: { p256dh: string; auth: string } }) {
+  return runAction({ name: "profile.renewPush" }, async () => {
+    const user = await requireUser();
+    if (!rateLimit(`messaging:push:renew:${user.id}`, 20, 10 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.", 429);
+    const t = await getT();
+    const ua = (await headers()).get("user-agent") ?? "";
+    const sessionId = await currentSessionId();
+    if (!sessionId) throw new AppError("Vuelve a iniciar sesión.", 401);
+    try {
+      await renewPushSubscription(user.id, sessionId, input?.oldHash, { endpoint: input?.endpoint, keys: input?.keys }, ua);
+    } catch (err) {
+      if (!(err instanceof PushSubscribeError)) throw err;
+      if (err.reason === "unknown") throw new AppError("Ese dispositivo ya no está en la lista.", 404);
+      if (err.reason === "service") throw new AppError("Este navegador usa un servicio de avisos que Pizarro no admite.");
+      throw new AppError("El navegador ha dado una suscripción no válida. Vuelve a intentarlo.");
+    }
+    describeAction("Renovó los avisos push en {device}", { device: deviceLabel(ua, t) });
+  });
+}
+
 /** Desactiva los avisos en este navegador (por su endpoint, solo si es de esta persona). */
 export async function unsubscribePush(input: { endpoint: string }) {
   return runAction({ name: "profile.unsubscribePush" }, async () => {
@@ -82,13 +106,17 @@ export async function savePushPrefs(prefs: z.input<typeof prefsSchema>) {
   });
 }
 
-/** «Probar»: un aviso de prueba a todos sus dispositivos. Con el tope de las pruebas de Telegram y WhatsApp. */
-export async function testPush() {
+/**
+ * «Probar»: un aviso de prueba al dispositivo desde el que se pulsa (`hash` = huella de su suscripción) o, sin ella, a
+ * todos los de la persona. Con el tope de las pruebas de Telegram y WhatsApp.
+ */
+export async function testPush(input?: { hash?: string }) {
   return runAction({ name: "profile.testPush", args: [] }, async () => {
     const user = await requireUser();
     if (!rateLimit(`messaging:mytest:${user.id}`, 5, 10 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.", 429);
     const t = await getT();
-    const r = await sendPushToUser(user, pushTestMessage(t, await pushIcon()), { test: true });
+    const onlyHash = typeof input?.hash === "string" && /^[0-9a-f]{64}$/.test(input.hash) ? input.hash : undefined;
+    const r = await sendPushToUser(user, pushTestMessage(t, await pushIcon()), { test: true, onlyHash });
     if (!r.sent && !r.failed && !r.expired) throw new AppError("Activa primero los avisos en este dispositivo.");
     describeAction("Probó sus avisos push", { sent: r.sent, failed: r.failed, expired: r.expired });
     return { sent: r.sent, failed: r.failed, expired: r.expired };
