@@ -18,7 +18,7 @@ test("VerifyForm: «Recordar este dispositivo» es una casilla controlada y el c
 test("AppShell: el menú móvil se cierra con Atrás (useBackToClose sobre drawerOpen)", () => {
   const src = read("src/components/AppShell.tsx");
   assert.match(src, /import \{ useBackToClose \} from "\.\/ui\/useBackToClose"/);
-  assert.match(src, /useBackToClose\(drawerOpen, closeDrawer\)/);
+  assert.match(src, /useBackToClose\(drawerOpen, closeDrawer, drawerLeavingByLink\)/);
 });
 
 test("el botón flotante de crear se oculta con el teclado abierto (campo con foco)", () => {

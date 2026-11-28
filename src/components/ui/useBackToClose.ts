@@ -60,7 +60,15 @@ function silentBack() {
  * Si `onClose` devuelve (o resuelve) `false`, el modal no se cerró (p. ej. se pidió confirmación y se dijo que no): la
  * entrada se vuelve a añadir, así el siguiente «atrás» vuelve a cerrar el modal en vez de salir de la página.
  */
-export function useBackToClose(active: boolean, onClose: () => void | boolean | Promise<void | boolean>) {
+export function useBackToClose(
+  active: boolean,
+  onClose: () => void | boolean | Promise<void | boolean>,
+  /**
+   * Si está a true al cerrarse, no se retira la entrada con un «atrás»: el cierre lo provoca un enlace que va a navegar
+   * (el menú del móvil), y ese «atrás» llegaría antes que el router y anularía la navegación. Se vuelve a poner a false.
+   */
+  keepEntry?: { current: boolean },
+) {
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -106,8 +114,12 @@ export function useBackToClose(active: boolean, onClose: () => void | boolean | 
       alive = false;
       clearTimeout(timer);
       window.removeEventListener("popstate", onPop);
-      // Cerrado sin el botón atrás: quitar nuestra entrada (si no se ha navegado a otra página).
-      if (pushed && !closedByBack && inState()) silentBack();
+      // Cerrado sin el botón atrás: quitar nuestra entrada (si no se ha navegado a otra página ni se va a navegar).
+      const leaving = keepEntry?.current === true;
+      if (keepEntry) keepEntry.current = false;
+      if (pushed && !closedByBack && !leaving && inState()) silentBack();
     };
+    // keepEntry es una ref estable: se lee al cerrar, no hace falta como dependencia.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 }
