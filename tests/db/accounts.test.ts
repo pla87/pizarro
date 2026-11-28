@@ -717,8 +717,10 @@ const emailOf = async (u: { id: string }) => (await db.user.findUniqueOrThrow({ 
 describe("topes de los emails de «¿Olvidaste tu contraseña?»", () => {
   // La IP de las pruebas (sin cabeceras): sus topes de 15 min se vacían entre peticiones, como si pasara el tiempo.
   const freshWindow = (email: string) => {
-    resetRateLimit(`reset:email:${email}`);
-    for (const ip of ["unknown", "127.0.0.1", "::1"]) resetRateLimit(`reset:ip:${ip}`);
+    for (const ip of ["unknown", "127.0.0.1", "::1"]) {
+      resetRateLimit(`reset:email:${email}:${ip}`);
+      resetRateLimit(`reset:ip:${ip}`);
+    }
   };
   const request = async (email: string) => {
     freshWindow(email);
@@ -729,6 +731,22 @@ describe("topes de los emails de «¿Olvidaste tu contraseña?»", () => {
     resetRateLimit("reset:repeat-day");
     resetRateLimit("reset:repeat-day:logged");
   };
+
+  test("el tope de 15 min por dirección es por IP: quien llena el suyo no deja a la víctima sin pedir su enlace", async () => {
+    clearGlobal();
+    const user = await makeUser();
+    const email = await emailOf(user);
+    resetRateLimit(`reset:email-day:${email}`);
+    freshWindow(email);
+    logout();
+    // Un tercero, desde otra IP, agota los 3 intentos de 15 min de esa dirección (y los pasa).
+    for (let i = 0; i < 5; i++) rateLimit(`reset:email:${email}:203.0.113.9`, 3, 15 * 60_000);
+    assert.equal(rateLimitReached(`reset:email:${email}:203.0.113.9`, 3), true);
+    // La víctima, desde su red, pide el enlace y le llega.
+    assert.equal(await countMails(async () => { expectOk(await requestPasswordReset(email)); await afterDone(); }), 1);
+    resetRateLimit(`reset:email-day:${email}`);
+    resetRateLimit(`reset:email:${email}:203.0.113.9`);
+  });
 
   test("5 al día a una dirección desde un navegador desconocido: la 6.ª responde igual y no envía; desde un dispositivo conocido de la cuenta, sí", async () => {
     clearGlobal();
@@ -783,6 +801,23 @@ describe("topes de los emails de «¿Olvidaste tu contraseña?»", () => {
     logout();
     clearGlobal();
     for (const email of emails) resetRateLimit(`reset:email-day:${email}`);
+  });
+});
+
+describe("caducidad del desafío del segundo paso", () => {
+  test("el alta del método (SETUP) dura unos 30 min y el segundo paso normal (LOGIN), 10", async () => {
+    const user = await makeUser({ role: "ADMIN" });
+    logout();
+    const ttl = async (kind: "LOGIN" | "SETUP") => {
+      const before = Date.now();
+      const row = await startChallenge(user.id, kind);
+      return row.expiresAt.getTime() - before;
+    };
+    const setup = await ttl("SETUP");
+    assert.ok(setup > 29 * 60_000 && setup <= 30 * 60_000 + 5_000, String(setup));
+    const login = await ttl("LOGIN");
+    assert.ok(login > 9 * 60_000 && login <= 10 * 60_000 + 5_000, String(login));
+    logout();
   });
 });
 
