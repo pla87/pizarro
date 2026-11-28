@@ -236,28 +236,36 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado tras la ronda 73:** publicadas la v1.75.1 (3 vueltas de revisión y caza de bugs y las decisiones 1-8 del
-propietario: tope diario de WhatsApp, ping del canal en vivo con la posición, sesiones cerradas al restaurar, etc.) y la
-v1.76.0 (R69F1, **notas generales en Documentación**, opción A: texto en `ProjectDocument.noteContent`, versión
-`noteVersion` para conflictos, `pinnedAt` para «Notas generales»; «¿Descartar el texto?» al importar; pasar a privado
-nombra a quienes conservan el acceso; plan por persona con subtareas con tope en SQL). Ver `HISTORIA.md`, ronda 73, y las
-guardas «(Ronda 73)» de `GUARDAS.md`.
+**Versión publicada:** la v1.79.0 (`stable` y la etiqueta `v1.79.0`). Rondas 73-75 de un tirón en la nube:
+- v1.75.1: revisión y caza de bugs, tope diario de WhatsApp, ping del canal en vivo con la posición, sesiones cerradas al
+  restaurar. v1.76.0: **notas generales en Documentación** (`ProjectDocument.noteContent`, `noteVersion`, `pinnedAt`).
+  v1.77.0: menciones en notas y título automático. v1.78.0: **avisos push** (`PushSubscription` atada a la sesión).
+  v1.79.0 (ronda 75): «Avisos por email» simplificado, push que se prueba en este dispositivo y se renueva solo, icono de
+  silueta, y 3 vueltas de revisión y caza de bugs. Detalle: `HISTORIA.md` (rondas 73-75) y las guardas «(Ronda 73)»,
+  «(Ronda 74)» y «(Ronda 75)» de `GUARDAS.md`.
+- Método que funcionó en la ronda 75 («usa agentes con modelos más sencillos y revisa siempre con el principal»):
+  implementadores y revisores con `model: "sonnet"` en worktrees, briefs en ficheros temporales (IMPL: normas comunes;
+  BRIEF: revisores de solo lectura con fichero:línea, gravedad, evidente/opcional y candidatos a retirar), y la sesión
+  principal revisa cada diff (sobre todo lo de seguridad), integra, pasa knip/tsc/lint/i18n/unitarias/con base y las e2e
+  completas con la build de producción antes de publicar.
+- knip ya funciona en la nube (`.claude/settings.json` en `main` permite `npx --yes knip@5`). La sesión no puede editar
+  sus propios permisos ni forzar la subida de la rama: tras una fusión aplastada, `git merge origin/main` en la rama de
+  trabajo y subir normal (PUBLICAR, «Publicar desde la sesión»).
+- Trampa vista: la CI de la Release pasa las pruebas con base en orden al azar; una prueba que compara una base
+  restaurada con la original debe excluir lo que la restauración borra a propósito (sesiones, dispositivos, push), y las
+  pruebas del informe semanal no deben sumar horas a «ahora» sin `sameDayNow()` (fallaban de noche).
 
-**Ronda 74 (v1.77.0):** menciones en notas con aviso en la campana y email a elegir por cada persona (al momento, en el
-resumen diario o no; `User.noteMentionEmail`, `Notification.documentId`), título automático de las notas
-(`noteAutoName`), y retirados `CHROME-R69.md` y `bh48a.test.ts`. Ver `HISTORIA.md`, ronda 74.
+**Pendiente del propietario:**
+- Probar en real lo de la v1.79.0: `docs/PRUEBAS.md` §24 (push en el PC: marcar la casilla en ese ordenador; ventana
+  emergente en Android desde los ajustes de notificaciones; avisos por email) y lo que falte de §23 (Edge, Firefox,
+  Safari, iPhone instalado, cerrar sesión, quitar un dispositivo, mención en una nota).
+- La prueba del prompt para que una IA agéntica instale en Railway (crea un proyecto de pago): con el propietario delante.
 
-**Ronda 74 (v1.78.0):** **avisos push del navegador** como canal opcional (Web Push sin dependencias nuevas, tabla
-`PushSubscription` atada a la sesión, claves VAPID cifradas, solo servicios de Google/Mozilla/Apple/Microsoft). Revisión
-de seguridad independiente con sus arreglos. Falta que el propietario lo pruebe en real (`docs/PRUEBAS.md` §23).
-
-**Siguiente:** rondas ya aprobadas: una URL por tarea y el migrador sin Prisma. La prueba real del prompt para que una IA
-agéntica instale en Railway, con el propietario delante. Ideas pospuestas: refresco en vivo de la lista de Documentación
-(el propietario dijo que no por ahora).
-
-**Permisos del entorno de la nube:** el clasificador del modo automático bloquea `npx --yes knip@5` y que la sesión edite
-sus propios permisos. El propietario añadirá a mano `.claude/settings.json` con
-`{"permissions":{"allow":["Bash(npx --yes knip@5:*)"]}}` en `main` (aceptado en la ronda 74).
+**Siguiente (aprobado por el propietario):** rondas propias de **una URL por tarea** y del **migrador sin Prisma**.
+Preguntas opcionales sin contestar de la ronda 75 (en el informe de esa ronda y en `HISTORIA.md`): tareas nuevas y
+terminadas siempre en el resumen diario; imágenes de las notas al exportar «Sin adjuntos»; `lockTaskRowsForDelete` al
+borrar tareas; `Permissions-Policy` de cámara y micrófono; botones flotantes solo con el teclado realmente abierto;
+retirar «Probar a todos» de `testPush`; en una versión posterior, quitar la columna `User.noteMentionEmail`.
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.
