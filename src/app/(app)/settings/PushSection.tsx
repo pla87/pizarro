@@ -11,13 +11,9 @@ import type { ChannelPrefs } from "@/lib/messaging-core";
 import { currentPushSubscription, keyBytes, notificationSettingsHint, pushSupport, pushWorkerReady, rememberPushHash, sameServerKey, sha256Hex, type PushSupport } from "@/lib/push-client";
 import { resyncPush } from "@/lib/push-sync";
 import type { PushView } from "@/lib/web-push";
+import { noticeLabels, type NoticeKind } from "./notice-labels";
 
-const PREF_LABELS: { key: keyof ChannelPrefs; label: string }[] = [
-  { key: "notifyMention", label: "Menciones (@) en tareas y notas" },
-  { key: "notifyAssigned", label: "Tareas que me asignan" },
-  { key: "notifyComment", label: "Comentarios y respuestas en tareas que sigo" },
-  { key: "notifyDue", label: "Cambios de fecha límite y recordatorios" },
-];
+const PREF_KEYS: Record<NoticeKind, keyof ChannelPrefs> = { mention: "notifyMention", assigned: "notifyAssigned", due: "notifyDue", comment: "notifyComment" };
 
 interface DeviceState {
   support: PushSupport;
@@ -52,7 +48,8 @@ export function PushSection({ initial }: { initial: PushView }) {
   const hereHash = device?.hash ?? null;
   const setPermission = (p: NotificationPermission) => setDevice((d) => (d ? { ...d, permission: p } : d));
   const [form, setForm] = useState(initial.prefs);
-  const dirty = PREF_LABELS.some(({ key }) => form[key] !== view.prefs[key]);
+  const prefLabels = noticeLabels(t).map(([kind, label]) => ({ key: PREF_KEYS[kind], label }));
+  const dirty = prefLabels.some(({ key }) => form[key] !== view.prefs[key]);
 
   useEffect(() => {
     let alive = true;
@@ -215,19 +212,19 @@ export function PushSection({ initial }: { initial: PushView }) {
         <>
           <fieldset className="space-y-2">
             <legend className="mb-1 text-xs font-medium text-slate-500">{t("Qué avisos recibir en tus dispositivos")}</legend>
-            {PREF_LABELS.map(({ key, label }) => (
+            {prefLabels.map(({ key, label }) => (
               <label key={key} className="flex items-start gap-2 text-sm">
                 <input type="checkbox" className="mt-0.5" name={`push-${key}`} checked={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.checked }))} />
-                <span>{t(label)}</span>
+                <span>{label}</span>
               </label>
             ))}
           </fieldset>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" className="btn-primary py-1.5" onClick={savePrefs} disabled={pending || !dirty}>{t("Guardar")}</button>
             <button type="button" className="btn-secondary py-1.5" onClick={test} disabled={pending || !here}>{t("Probar")}</button>
+            {!here && <span className="text-xs text-slate-500" data-testid="push-test-hint">{t("Para probar los avisos, actívalos primero en este dispositivo.")}</span>}
           </div>
-          {!here && <p className="text-xs text-slate-500" data-testid="push-test-hint">{t("Para probar los avisos, actívalos primero en este dispositivo.")}</p>}
-          <div>
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
             <h3 className="text-xs font-medium text-slate-500">{t("Tus dispositivos con avisos ({n} de {max})", { n: view.devices.length, max: view.maxDevices })}</h3>
             <ul className="mt-1 divide-y divide-slate-200 dark:divide-slate-800">
               {view.devices.map((d) => (

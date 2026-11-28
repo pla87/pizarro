@@ -98,10 +98,8 @@ export const mensajeria: Record<string, string> = {
   "WhatsApp desconectado.": "WhatsApp disconnected.",
   "Qué avisos recibir por aquí": "Which notifications to get here",
   "Enviar mensaje de prueba": "Send a test message",
-  "Menciones (@)": "Mentions (@)",
   "Tareas que me asignan": "Tasks assigned to me",
   "Comentarios y respuestas en tareas que sigo": "Comments and replies on tasks I follow",
-  "Cambios de fecha límite y recordatorios de «Esperando»": "Due date changes and “Waiting” reminders",
   "Enviado por Telegram": "Sent via Telegram",
 
   // Errores
@@ -279,7 +277,6 @@ export const mensajeria: Record<string, string> = {
   "{n} aviso(s) de mención en una nota creados ({external} con envío externo al momento)": "{n} note mention notification(s) created ({external} sent outside right away)",
   // Avisos push (ronda 76): textos más cortos, «Probar» en este dispositivo, errores al activar
   "Notificaciones del navegador o del móvil": "Browser or phone notifications",
-  "Menciones (@) en tareas y notas": "Mentions (@) in tasks and notes",
   "Cambios de fecha límite y recordatorios": "Due date changes and reminders",
   "Para probar los avisos, actívalos primero en este dispositivo.": "To test notifications, turn them on first on this device.",
   "No se ha podido enviar el aviso de prueba a este dispositivo. Desactiva y vuelve a activar los avisos aquí.":

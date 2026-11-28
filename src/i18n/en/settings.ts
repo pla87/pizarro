@@ -95,7 +95,6 @@ export const settings: Record<string, string> = {
   "Preferencias guardadas": "Preferences saved",
   "El envío de emails aún no está configurado en el servidor.": "Email sending is not configured on the server yet.",
   "Número de WhatsApp (formato internacional)": "WhatsApp number (international format)",
-  "Guardar avisos": "Save notifications",
   "Plantilla guardada": "Template saved",
   "(vacía)": "(empty)",
   "¿Borrar «{name}»?": "Delete “{name}”?",

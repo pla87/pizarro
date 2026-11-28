@@ -694,7 +694,7 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-detalle-i
 Fuera de *Ajustes del proyecto*: en *Administración → Usuarios* la descripción es de una línea y el «por qué» sale en la
 nota «i» (se abre al pulsar y se cierra con Escape); una nota dentro de un diálogo (borrar un usuario) se cierra con Escape
 sin cerrar el diálogo. Botones desactivados cuando no harían nada: «Limpiar» en *Logs* sin filtros, «Guardar» las cuotas
-de *Ajustes → Almacenamiento*, «Guardar» el nombre y «Guardar avisos» de *Mi perfil* sin cambios, «Cambiar contraseña» sin
+de *Ajustes → Almacenamiento*, «Guardar» el nombre y «Guardar» de los avisos por email de *Mi perfil* sin cambios, «Cambiar contraseña» sin
 rellenar, «Partir del texto por defecto» con ese texto ya puesto y «Todas»/«Ninguna» al generar una release. La nota cabe
 a 390 px. *Ajustes* e *Integraciones* son dos pestañas (ronda 57): el email, Google y Telegram/WhatsApp solo están en
 `/admin/integrations` (la redirección de las anclas antiguas de Ajustes se retiró en la ronda 68). *Mi perfil → Avisos*

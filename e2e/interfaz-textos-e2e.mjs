@@ -120,9 +120,9 @@ if (only.includes("profile")) {
   await page.goto(`${L.BASE}/settings?tab=avisos`);
   const emailCard = page.locator("section").filter({ hasText: "Avisos por email" });
   await emailCard.waitFor({ timeout: 20000 });
-  L.eq("AVISOS: una sola tarjeta de email con un solo «Guardar avisos»", await page.getByRole("button", { name: "Guardar avisos" }).count(), 1);
-  const saveMention = emailCard.getByRole("button", { name: "Guardar avisos" });
-  L.eq("AVISOS: sin cambios, «Guardar avisos» está desactivado", await saveMention.isEnabled(), false);
+  L.eq("AVISOS: la tarjeta de email tiene un solo botón «Guardar»", await emailCard.getByRole("button", { name: "Guardar", exact: true }).count(), 1);
+  const saveMention = emailCard.getByRole("button", { name: "Guardar", exact: true });
+  L.eq("AVISOS: sin cambios, «Guardar» de email está desactivado", await saveMention.isEnabled(), false);
   await emailCard.getByRole("checkbox", { name: "Menciones en tareas y notas" }).click();
   L.eq("AVISOS: al marcar una casilla, se activa", await saveMention.isEnabled(), true);
   await emailCard.getByRole("checkbox", { name: "Menciones en tareas y notas" }).click();
@@ -134,7 +134,7 @@ if (only.includes("profile")) {
   await saveMention.click();
   await page.getByText("Preferencias guardadas").first().waitFor({ timeout: 10000 });
   const saved = (await L.q(`SELECT "notifyEmail" n, "notifyCommentEmail" c FROM "User" WHERE email=$1`, [L.ADMIN]))[0];
-  L.eq("AVISOS: un solo «Guardar avisos» guarda las dos casillas", [saved.n, saved.c], [!prefsBefore.n, !prefsBefore.c]);
+  L.eq("AVISOS: un solo «Guardar» guarda las dos casillas", [saved.n, saved.c], [!prefsBefore.n, !prefsBefore.c]);
   L.eq("AVISOS: tras guardar, vuelve a estar desactivado", await saveMention.isEnabled(), false);
   await L.q(`UPDATE "User" SET "notifyEmail"=$2, "notifyCommentEmail"=$3 WHERE email=$1`, [L.ADMIN, prefsBefore.n, prefsBefore.c]);
   L.check("AVISOS: la descripción es de una línea", !(await bodyText(page)).includes("Cuando alguien te menciona con @"));
