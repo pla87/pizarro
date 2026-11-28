@@ -168,6 +168,10 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `text-sm` esperando que se aplique en móvil. Excluye lo que ya mide 16 px o más (`text-base`, `text-lg`, `text-xl`…), como
   el título del detalle. Tabletas y móviles en horizontal quedan fuera (opcional pendiente).
 
+- (Ronda 75) El menú del móvil usa `useBackToClose` (Atrás lo cierra). Un enlace del menú lo cierra a la vez que navega:
+  pasa `keepEntry` (ref a true antes de cerrar) para que el cierre no haga el «atrás» silencioso, que llegaba antes que el
+  router y anulaba la navegación (lo detectaron `accesibilidad-releases-e2e` e `interfaz-auditoria-e2e`). Cualquier
+  panel nuevo con `useBackToClose` que se cierre al pulsar un enlace necesita lo mismo.
 ## Logs
 
 - (Ronda 62) Mensajes de Logs traducibles: `logEvent({ label })` guarda la plantilla `{k, p}` en `details.$msg` (`LOG_LABEL_KEY`,
