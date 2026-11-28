@@ -90,7 +90,7 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
         }}
       >
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input type="checkbox" name="email-notices" checked={form.emailNotices} onChange={(e) => set("emailNotices", e.target.checked)} aria-expanded={form.emailNotices} aria-controls="email-notices-options" />
+          <input type="checkbox" name="email-notices" checked={form.emailNotices} onChange={(e) => set("emailNotices", e.target.checked)} />
           {t("Recibir avisos por email")}
         </label>
         {form.emailNotices && (

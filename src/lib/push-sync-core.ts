@@ -37,12 +37,11 @@ async function run({ pushSetup, renewPush }: ResyncDeps, opts: { once?: boolean 
     const sub = await currentPushSubscription();
     const hash = sub ? await sha256Hex(sub.endpoint) : null;
     if (hash === stored) return false;
-    if (opts.once) {
-      if (sessionStorage.getItem(ONCE_KEY)) return false;
-      sessionStorage.setItem(ONCE_KEY, "1");
-    }
+    if (opts.once && sessionStorage.getItem(ONCE_KEY)) return false;
     const setup = await pushSetup();
+    // Sin respuesta (p. ej. sin red) no se marca: la próxima carga lo vuelve a intentar.
     if (!setup.ok) return false;
+    if (opts.once) sessionStorage.setItem(ONCE_KEY, "1");
     const { publicKey, devices } = setup.data;
     if (!devices.some((d) => d.hash === stored)) {
       // Quitado desde otro dispositivo (o ya cambiado): no se reactiva; solo se alinea la huella.
