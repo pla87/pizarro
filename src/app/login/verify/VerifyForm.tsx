@@ -23,6 +23,8 @@ export function VerifyForm({ method, emailStatus }: { method: "TOTP" | "EMAIL"; 
       : emailStatus === "capped" ? { ok: false, text: t("Demasiados envíos. Espera unos minutos.") }
         : null,
   );
+  // Controlada: React restablece los campos no controlados tras cada acción (un código erróneo desmarcaba la casilla).
+  const [remember, setRemember] = useState(false);
   const [resending, startResend] = useActionTransition((text) => setNote({ ok: false, text }));
 
   return (
@@ -38,10 +40,10 @@ export function VerifyForm({ method, emailStatus }: { method: "TOTP" | "EMAIL"; 
         </p>
         <div>
           <label className="label" htmlFor="code">{t("Código de verificación")}</label>
-          <input id="code" name="code" className="input" autoComplete="one-time-code" autoFocus required maxLength={24} />
+          <input id="code" name="code" className="input" autoComplete="one-time-code" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoFocus required maxLength={24} />
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="remember" className="size-4 rounded" />
+          <input type="checkbox" name="remember" className="size-4 rounded" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
           {t("Recordar este dispositivo 14 días")}
         </label>
         {state.error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{state.error}</p>}

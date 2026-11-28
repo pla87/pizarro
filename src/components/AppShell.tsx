@@ -43,6 +43,7 @@ import { ConfirmProvider } from "./ui/ConfirmDialog";
 import { PromptProvider } from "./ui/PromptDialog";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useEscapeClose } from "./ui/useEscapeClose";
+import { useBackToClose } from "./ui/useBackToClose";
 import { useFocusTrap } from "./ui/focusTrap";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { loadWhenOnline } from "@/lib/connection";
@@ -102,6 +103,8 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
   useEscapeClose(drawerOpen, () => setDrawerPath(null), { yieldToModal: true });
   const closeDrawer = useCallback(() => setDrawerPath(null), []);
+  // El botón Atrás de Android cierra el menú (como los diálogos) en vez de salir de la página.
+  useBackToClose(drawerOpen, closeDrawer);
   // «Nuevo proyecto» del selector: el diálogo se pinta aquí, fuera del menú móvil, para poder cerrar el menú al abrirlo
   // (dentro del menú, cerrarlo se llevaba el diálogo; abierto, quedaba detrás).
   const [creatingProject, setCreatingProject] = useState(false);

@@ -169,8 +169,9 @@ export async function requestPasswordReset(email: string) {
     const ip = clientIp(await headers());
     const parsed = v.email.safeParse(email);
     const key = parsed.success ? parsed.data : String(email).slice(0, 200).toLowerCase();
-    // Los dos límites cuentan igual con cuentas que existen y que no: no delatan nada.
-    if (!rateLimit(`reset:ip:${rateIp(ip)}`, 10, 15 * 60_000) || !rateLimit(`reset:email:${key}`, 3, 15 * 60_000)) {
+    // Los dos límites cuentan igual con cuentas que existen y que no: no delatan nada. El de la dirección lleva también la
+    // IP: sin ella, un tercero que conociera el email lo llenaba con 3 peticiones y la víctima no podía pedir su enlace.
+    if (!rateLimit(`reset:ip:${rateIp(ip)}`, 10, 15 * 60_000) || !rateLimit(`reset:email:${key}:${rateIp(ip)}`, 3, 15 * 60_000)) {
       throw new AppError("Demasiados intentos. Espera unos minutos.");
     }
     if (parsed.success) {

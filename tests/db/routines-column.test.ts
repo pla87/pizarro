@@ -128,6 +128,30 @@ describe("destino de rutinas y borrado de columnas", () => {
     expectFail(await setColumnRoutineTarget(f.columns.todo, f.columns.doing), /rutinas/);
   });
 
+  test("marcar el destino como terminada o darle el rol Rutinas quita el destino de la columna de rutinas, y deshacer lo devuelve", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectOk(await setColumnRole(f.columns.todo, "ROUTINES"));
+    const target = async () => (await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).routineTargetColumnId;
+    expectOk(await setColumnRoutineTarget(f.columns.todo, f.columns.doing));
+    // Terminada: ya no es destino.
+    expectOk(await setColumnDone(f.columns.doing, true));
+    assert.equal(await target(), null);
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.doing } })).isDone, false);
+    assert.equal(await target(), f.columns.doing);
+    // Rol Rutinas: igual.
+    expectOk(await setColumnRole(f.columns.doing, "ROUTINES"));
+    assert.equal(await target(), null);
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.doing } })).role, "NONE");
+    assert.equal(await target(), f.columns.doing);
+    // Desmarcar o repetir el mismo valor no toca nada.
+    expectOk(await setColumnDone(f.columns.doing, false));
+    assert.equal(await target(), f.columns.doing);
+  });
+
   test("deshacer el borrado de la columna destino la recrea con su destino y vuelve a apuntarla desde la de rutinas", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });

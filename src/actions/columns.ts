@@ -258,6 +258,8 @@ async function changeColumnRole<R = undefined>(
   // vuelve a desactivar: `costOff`).
   const project = value === "BUDGET" && column.role !== "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
   const enablesCost = project !== null && !project.taskFields.includes("cost");
+  // Con el rol «Rutinas» la columna deja de valer como destino de otras columnas de rutinas: se quita de las que apuntaban a ella.
+  const pointing = value === "ROUTINES" && column.role !== "ROUTINES" ? await routinePointersTo(column) : [];
   addUndo(
     {
       t: "column.set", id: column.id,
@@ -271,6 +273,7 @@ async function changeColumnRole<R = undefined>(
       ...(enablesCost ? { costOff: true as const } : {}),
     },
     ...holders.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: value } })),
+    ...pointing.map((id) => ({ t: "column.set" as const, id, data: { routineTargetColumnId: column.id } })),
     ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])),
   );
   const result = await db.$transaction(async (tx) => {
@@ -286,6 +289,7 @@ async function changeColumnRole<R = undefined>(
       where: { id: columnId },
       data: { role: value, ...(clearWaiting ? { waitingDays: null } : {}), ...(clearRoutine ? { routineTargetColumnId: null } : {}), ...(assignChanged ? assignData : {}), ...(rename ? { name: rename } : {}) },
     });
+    if (pointing.length) await tx.column.updateMany({ where: { id: { in: pointing }, routineTargetColumnId: columnId }, data: { routineTargetColumnId: null } });
     // Una columna que pasa a «Esperando» cuenta la espera desde ahora: sin esto, las tareas antiguas recibirían de golpe un aviso cada una.
     if (value === "WAITING" && column.role !== "WAITING") await tx.task.updateMany({ where: { columnId, archivedAt: null }, data: { columnEnteredAt: new Date(), waitingNotifiedAt: null } });
     // Las tareas fijas solo existen en la columna de release y en las de plan para IA: las que quedan fuera pasan a normales.
@@ -433,13 +437,28 @@ export async function setColumnDefaultKind(columnId: string, kindId: string | nu
   });
 }
 
+/**
+ * Las columnas de rutinas que apuntan a `columnId` como destino (una columna terminada o la de rutinas deja de valer
+ * como destino: recurrence.ts ya la ignora). Se anotan para el deshacer y se ponen a null en la misma transacción.
+ */
+async function routinePointersTo(column: { id: string; projectId: string }): Promise<string[]> {
+  const rows = await db.column.findMany({ where: { projectId: column.projectId, routineTargetColumnId: column.id }, select: { id: true } });
+  return rows.map((c) => c.id);
+}
+
 /** Marca si las tarjetas de la columna cuentan como terminadas (informe y plazos). */
 export async function setColumnDone(columnId: string, isDone: boolean) {
   return runAction({ name: "columns.setColumnDone", args: [columnId, isDone] }, async () => {
     const column = await findColumn(columnId);
-    addUndo({ t: "column.set", id: column.id, data: { isDone: column.isDone } });
+    const value = z.boolean().parse(isDone);
+    // Una columna terminada ya no vale como destino de las rutinas: se quita de las que apuntaban a ella (y deshacer lo devuelve).
+    const pointing = value && !column.isDone ? await routinePointersTo(column) : [];
+    addUndo({ t: "column.set", id: column.id, data: { isDone: column.isDone } }, ...pointing.map((id) => ({ t: "column.set" as const, id, data: { routineTargetColumnId: column.id } })));
     describeAction(isDone ? "Marcó la columna «{name}» como terminada" : "Desmarcó la columna «{name}» como terminada", { name: column.name });
-    await db.column.update({ where: { id: columnId }, data: { isDone: z.boolean().parse(isDone) } });
+    await db.$transaction(async (tx) => {
+      await tx.column.update({ where: { id: columnId }, data: { isDone: value } });
+      if (pointing.length) await tx.column.updateMany({ where: { id: { in: pointing }, routineTargetColumnId: columnId }, data: { routineTargetColumnId: null } });
+    });
   });
 }
 

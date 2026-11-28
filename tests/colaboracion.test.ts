@@ -103,6 +103,15 @@ test("informe semanal: si falló el día elegido, sale en cuanto pueda; sin dos 
   const recovered = new Date("2026-10-27T07:30:00Z");
   assert.equal(reportDue(new Date("2026-10-28T07:30:00Z"), tz, { ...s, lastSentAt: recovered }), false);
   assert.equal(reportDue(new Date("2026-11-02T07:30:00Z"), tz, { ...s, lastSentAt: recovered }), true);
+  // La recuperación espera a la hora elegida: el martes de madrugada (8 días y poco, pero antes de las 8) no sale.
+  assert.equal(reportDue(new Date("2026-10-28T05:00:00Z"), tz, s), false);
+  assert.equal(reportDue(new Date("2026-10-28T07:30:00Z"), tz, s), true);
+  // Horario editado después del último envío (día cambiado, reactivado): no se recupera, espera al día elegido.
+  const edited = new Date("2026-10-23T10:00:00Z");
+  assert.equal(reportDue(new Date("2026-10-27T07:30:00Z"), tz, { ...s, weekday: 3, updatedAt: edited }), false);
+  assert.equal(reportDue(new Date("2026-10-28T07:30:00Z"), tz, { ...s, weekday: 3, updatedAt: edited }), true); // el día elegido sí
+  // El propio envío toca updatedAt unos milisegundos después: no cuenta como edición.
+  assert.equal(reportDue(new Date("2026-10-27T07:30:00Z"), tz, { ...s, updatedAt: new Date(sentMonday.getTime() + 500) }), true);
   // Sin ningún envío anterior no se recupera nada: activar el informe a mitad de semana no manda uno al momento.
   assert.equal(reportDue(new Date("2026-10-28T10:00:00Z"), tz, { ...s, lastSentAt: null }), false);
 });
