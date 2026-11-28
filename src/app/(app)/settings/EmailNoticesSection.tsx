@@ -8,6 +8,7 @@ import { updateEmailPrefs } from "@/actions/collab-prefs";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
+import { noticeLabels, type NoticeKind } from "./notice-labels";
 
 type EmailPrefs = {
   /** Casilla principal: apagada, ningún email de avisos ni resumen. */
@@ -46,26 +47,26 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [form, setForm] = useState(prefs);
-  // Lo guardado: sin cambios, «Guardar avisos» no haría nada y queda desactivado.
+  // Lo guardado: sin cambios, «Guardar» no haría nada y queda desactivado.
   const [saved, setSaved] = useState(prefs);
   const dirty = (Object.keys(form) as (keyof EmailPrefs)[]).some((k) => form[k] !== saved[k]);
-  const projectBoxes = [
-    ["notifyEmail", t("Menciones en tareas y notas")],
-    ["notifyAssignedEmail", t("Cuando me asignan una tarea")],
-    ["notifyDueEmail", t("Cambios de fecha límite y recordatorios")],
-    ["notifyCommentEmail", t("Comentarios y respuestas en tareas que sigo")],
-  ] as const;
+  const emailKey: Record<NoticeKind, "notifyEmail" | "notifyAssignedEmail" | "notifyDueEmail" | "notifyCommentEmail"> = {
+    mention: "notifyEmail", assigned: "notifyAssignedEmail", due: "notifyDueEmail", comment: "notifyCommentEmail",
+  };
+  const projectBoxes = noticeLabels(t).map(([kind, label]) => [emailKey[kind], label] as const);
   const set = <K extends keyof EmailPrefs>(key: K, value: EmailPrefs[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   return (
-    <section className="card p-5" data-testid="email-notices">
-      <h2 className="flex items-center gap-2 font-semibold"><Mail size={17} /> {t("Avisos por email")}</h2>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Notificaciones por email")}</p>
+    <section className="card space-y-4 p-5" data-testid="email-notices">
+      <div>
+        <h2 className="flex items-center gap-2 font-semibold"><Mail size={17} /> {t("Avisos por email")}</h2>
+        <p className="mt-0.5 text-sm text-slate-500">{t("Notificaciones por email")}</p>
+      </div>
       {/* Sin email en el servidor, arriba y destacado (antes, una línea gris al final con las casillas como si funcionaran).
           Las casillas se pueden seguir marcando (se guardan para cuando se configure), pero sus textos se ven atenuados: en gris
           (slate-500, 4,7:1 sobre blanco) y no con transparencia, que dejaba las ayudas de debajo en 2,3:1. */}
       {!emailAvailable && (
-        <p role="status" data-email-unavailable className="mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+        <p role="status" data-email-unavailable className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
           <span>
             {t("El envío de emails aún no está configurado en el servidor: de momento no se envía ningún email. Lo que marques aquí se guarda y valdrá cuando se configure.")}
@@ -74,7 +75,7 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
         </p>
       )}
       <form
-        className={cn("mt-4 space-y-4", !emailAvailable && "[&_label]:text-slate-500 dark:[&_label]:text-slate-400")}
+        className={cn("space-y-4", !emailAvailable && "[&_label]:text-slate-500 dark:[&_label]:text-slate-400")}
         onSubmit={(e) => {
           e.preventDefault();
           const sent = form;
@@ -143,7 +144,7 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
             </fieldset>
           </div>
         )}
-        <button className="btn-primary" disabled={pending || !dirty}>{t("Guardar avisos")}</button>
+        <button className="btn-primary py-1.5" disabled={pending || !dirty}>{t("Guardar")}</button>
       </form>
     </section>
   );

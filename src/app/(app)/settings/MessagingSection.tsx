@@ -9,6 +9,7 @@ import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { ChannelPrefs } from "@/lib/messaging-core";
+import { noticeLabels, type NoticeKind } from "./notice-labels";
 import type { MyChannelsView } from "@/lib/messaging";
 import { actionThrowResult } from "@/lib/stale-action";
 import { telegramWaitState } from "@/lib/telegram-wait";
@@ -279,19 +280,15 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
   );
 }
 
-const PREF_LABELS: { key: keyof ChannelPrefs; label: string }[] = [
-  { key: "notifyMention", label: "Menciones (@)" },
-  { key: "notifyAssigned", label: "Tareas que me asignan" },
-  { key: "notifyComment", label: "Comentarios y respuestas en tareas que sigo" },
-  { key: "notifyDue", label: "Cambios de fecha límite y recordatorios de «Esperando»" },
-];
+const PREF_KEYS: Record<NoticeKind, keyof ChannelPrefs> = { mention: "notifyMention", assigned: "notifyAssigned", due: "notifyDue", comment: "notifyComment" };
 
 function ChannelControls({ channel, prefs, canTest, mentionsOnly, refresh }: { channel: Channel; prefs: ChannelPrefs; canTest: boolean; mentionsOnly?: boolean; refresh: () => Promise<MyChannelsView | null> }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
   const [form, setForm] = useState(prefs);
-  const dirty = PREF_LABELS.some(({ key }) => form[key] !== prefs[key]);
+  const prefLabels = noticeLabels(t).map(([kind, label]) => ({ key: PREF_KEYS[kind], label }));
+  const dirty = prefLabels.some(({ key }) => form[key] !== prefs[key]);
   const id = channel.toLowerCase();
 
   const save = () =>
@@ -320,7 +317,7 @@ function ChannelControls({ channel, prefs, canTest, mentionsOnly, refresh }: { c
     <div className="space-y-3">
       <fieldset className="space-y-2">
         <legend className="mb-1 text-xs font-medium text-slate-500">{t("Qué avisos recibir por aquí")}</legend>
-        {PREF_LABELS.map(({ key, label }) => (
+        {prefLabels.map(({ key, label }) => (
           <label key={key} className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
@@ -330,7 +327,7 @@ function ChannelControls({ channel, prefs, canTest, mentionsOnly, refresh }: { c
               disabled={mentionsOnly && key !== "notifyMention"}
               onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.checked }))}
             />
-            <span>{t(label)}</span>
+            <span>{label}</span>
           </label>
         ))}
       </fieldset>
