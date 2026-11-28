@@ -49,16 +49,25 @@ export async function gatherDigest(user: DigestPrefsUser, now: Date, today: stri
   // Lo asignado a la persona sale aunque un admin no haya elegido ese proyecto (sigue pudiendo verlo).
   const mine = { project: visibleProjectsWhere(user as CurrentUser), archivedAt: null };
   // El resumen trae lo que la persona tiene marcado en «Emails sobre proyectos» (Mi perfil → Avisos): menciones en tareas y
-  // notas, asignaciones, fechas límite (y vencidas) y comentarios. Las tareas nuevas y las terminadas salen siempre.
+  // notas, asignaciones, fechas límite (vencidas, cambios de fecha y recordatorios de «Esperando») y comentarios de las
+  // tareas que sigue. Las tareas nuevas y las terminadas salen siempre.
   // Sin las casillas (quien llama no las da), todas marcadas.
   const wants = { mentions: user.notifyEmail ?? true, assigned: user.notifyAssignedEmail ?? true, due: user.notifyDueEmail ?? true, comments: user.notifyCommentEmail ?? true };
   const none = Promise.resolve([]);
-  const [created, done, comments, assigned, assignedNew, due, noteMentions, taskMentions] = await Promise.all([
+  const [created, done, comments, assigned, assignedNew, due, noteMentions, taskMentions, dueNotices] = await Promise.all([
     // «Tareas nuevas»: las que crearon otras personas (las suyas ya las conoce, como sus comentarios).
     db.task.findMany({ where: { ...live, createdAt: { gte: since }, OR: [{ createdById: null }, { createdById: { not: user.id } }] }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),
     // «Terminadas»: también las que se archivaron después de terminarlas (archivar lo terminado es lo normal antes del envío).
     db.taskEvent.findMany({ where: { code: "done", createdAt: { gte: since }, task: { project: working } }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
-    !wants.comments ? none : db.taskComment.findMany({ where: { deletedAt: null, createdAt: { gte: since }, OR: [{ authorId: null }, { authorId: { not: user.id } }], task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
+    // Solo las tareas que sigue (misma regla que notifyComment, ver followers.ts): una fila de seguimiento sin silenciar, o,
+    // sin fila suya, haberla creado o tenerla asignada. Una fila silenciada gana al seguimiento implícito.
+    !wants.comments ? none : db.taskComment.findMany({
+      where: {
+        deletedAt: null, createdAt: { gte: since }, OR: [{ authorId: null }, { authorId: { not: user.id } }],
+        task: { ...live, OR: [{ followers: { some: { userId: user.id, muted: false } } }, { followers: { none: { userId: user.id } }, OR: [{ createdById: user.id }, { assigneeId: user.id }] }] },
+      },
+      orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { id: true, task: { select: taskSelect } },
+    }),
     // «Asignadas a ti», de los avisos: solo si la tarea sigue siendo suya (si se la pasaron a otra persona, ya no).
     !wants.assigned ? none : db.notification.findMany({
       where: { userId: user.id, type: "ASSIGNED", createdAt: { gte: since }, task: { ...mine, assigneeId: user.id } },
@@ -94,16 +103,27 @@ export async function gatherDigest(user: DigestPrefsUser, now: Date, today: stri
           where: { userId: user.id, type: "MENTION", createdAt: { gte: since }, task: mine },
           orderBy: { createdAt: "desc" },
           take: MAX_ROWS,
-          select: { task: { select: taskSelect } },
+          select: { commentId: true, task: { select: taskSelect } },
         })
       : none,
+    // Cambios de fecha límite y recordatorios de «Esperando» (v1.79): con resumen diario ya no salen al momento, así que
+    // llegan aquí (si «Cambios de fecha límite y recordatorios» está marcada), también los de tareas que ya no son suyas.
+    !wants.due ? none : db.notification.findMany({
+      where: { userId: user.id, type: { in: ["DUE_CHANGED", "WAITING"] }, createdAt: { gte: since }, task: mine },
+      orderBy: { createdAt: "desc" },
+      take: MAX_ROWS,
+      select: { task: { select: taskSelect } },
+    }),
   ]);
   const out = emptyDigestInput();
   out.created = created.map((t) => item(t));
   out.done = done.map((e) => item(e.task));
   out.assigned = assignedItems(assigned, assignedNew);
+  // Un comentario que ya sale en «Te han mencionado en tareas» no se repite en «Comentarios nuevos».
+  const mentionedComments = new Set((taskMentions as { commentId: string | null }[]).map((n) => n.commentId).filter((id): id is string => !!id));
   const counts = new Map<string, DigestItem>();
-  for (const c of comments) {
+  for (const c of comments as { id: string; task: TaskRow }[]) {
+    if (mentionedComments.has(c.id)) continue;
     const prev = counts.get(c.task.id);
     if (prev) prev.count = (prev.count ?? 1) + 1;
     else counts.set(c.task.id, item(c.task, { count: 1 }));
@@ -126,6 +146,14 @@ export async function gatherDigest(user: DigestPrefsUser, now: Date, today: stri
     else mentions.set(n.task.id, item(n.task, { count: 1 }));
   }
   out.mentions = [...mentions.values()];
+  const changes = new Map<string, DigestItem>();
+  for (const n of dueNotices as { task: TaskRow | null }[]) {
+    if (!n.task) continue;
+    const prev = changes.get(n.task.id);
+    if (prev) prev.count = (prev.count ?? 1) + 1;
+    else changes.set(n.task.id, item(n.task, { count: 1 }));
+  }
+  out.changes = [...changes.values()];
   for (const task of due) (task.dueDate!.toISOString().slice(0, 10) === today ? out.dueToday : out.overdue).push(item(task));
   return out;
 }

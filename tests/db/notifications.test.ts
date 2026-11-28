@@ -305,9 +305,9 @@ describe("«Avisos por email» de Mi perfil", () => {
     expectOk(await updateEmailPrefs(all));
     const select = { notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true, digestHour: true, emailNotices: true } as const;
     assert.deepEqual(await db.user.findUniqueOrThrow({ where: { id: u.id }, select }), all);
-    // Los emails de administración solo los guarda un administrador (los demás no ven la casilla: su valor no cambia).
+    // Los emails de administración («Avisos importantes» para quien no es administrador) los guarda cualquiera.
     expectOk(await updateEmailPrefs({ ...all, notifyAdminEmail: false }));
-    assert.equal((await db.user.findUniqueOrThrow({ where: { id: u.id } })).notifyAdminEmail, true);
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: u.id } })).notifyAdminEmail, false);
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
     expectOk(await updateEmailPrefs({ ...all, notifyAdminEmail: false }));

@@ -140,6 +140,13 @@ export const colaboracion: Record<string, string> = {
   "a las": "at",
   "los emails de menciones en tareas y notas": "emails about mentions in tasks and notes",
   "los emails de administración de Pizarro": "Pizarro administration emails",
-  "los emails sobre proyectos del resumen diario": "the project emails of the daily digest",
   "Te han mencionado en tareas": "You were mentioned in tasks",
+  // Revisión del aviso por email (v1.79, vuelta 2)
+  "el resumen diario y los demás emails sobre proyectos (menciones, asignaciones, fechas y comentarios)": "the daily digest and the other emails about projects (mentions, assignments, dates and comments)",
+  "Dejarás de recibir {what}. Se desmarcan esas casillas en «Mi perfil → Avisos»: tampoco te llegarán al momento. Los emails de administración no cambian.": "You'll stop receiving {what}. Those boxes get unticked in “My profile → Notifications”: they won't arrive right away either. Administration emails won't change.",
+  "{n} avisos": "{n} notices",
+  "Emails importantes de Pizarro": "Important Pizarro emails",
+  "Avisos importantes": "Important notices",
+  "Cuando te añaden a un proyecto o te afecta un cambio de un administrador. Siempre al momento.": "When you're added to a project or an administrator's change affects you. Always sent right away.",
+  "Con el resumen diario y ninguna casilla de emails sobre proyectos marcada, no te llegará ningún resumen.": "With the daily digest and no project email box ticked, you won't receive any digest.",
 };

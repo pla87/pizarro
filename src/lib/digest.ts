@@ -3,10 +3,10 @@ import type { T } from "../i18n/core";
 import { escapeHtml, noReplyNote, unsubscribeFooter } from "./mail";
 import { mentionsToPlain } from "./mentions";
 
-type DigestSectionKey = "assigned" | "mentions" | "notes" | "overdue" | "dueToday" | "created" | "done" | "comments";
+type DigestSectionKey = "assigned" | "mentions" | "notes" | "changes" | "overdue" | "dueToday" | "created" | "done" | "comments";
 
 /** Orden en el que salen las secciones: primero lo que te toca a ti. */
-const DIGEST_ORDER: DigestSectionKey[] = ["assigned", "mentions", "notes", "overdue", "dueToday", "created", "done", "comments"];
+const DIGEST_ORDER: DigestSectionKey[] = ["assigned", "mentions", "notes", "changes", "overdue", "dueToday", "created", "done", "comments"];
 
 /** Máximo de tareas por sección en el correo (el resto se resume en «y N más»). */
 export const DIGEST_MAX_ITEMS = 25;
@@ -25,8 +25,8 @@ export interface DigestItem {
   more?: number;
 }
 
-/** Lo reunido para el resumen, por sección («notes» y «mentions» pueden faltar: solo las rellena quien tiene marcadas las menciones). */
-export type DigestInput = Record<Exclude<DigestSectionKey, "notes" | "mentions">, DigestItem[]> & { notes?: DigestItem[]; mentions?: DigestItem[] };
+/** Lo reunido para el resumen, por sección («notes» y «mentions» pueden faltar: solo las rellena quien tiene marcadas las menciones; «changes», quien tiene marcadas las fechas). */
+export type DigestInput = Record<Exclude<DigestSectionKey, "notes" | "mentions" | "changes">, DigestItem[]> & { notes?: DigestItem[]; mentions?: DigestItem[]; changes?: DigestItem[] };
 
 interface DigestSection {
   key: DigestSectionKey;
@@ -39,7 +39,7 @@ interface DigestSection {
 }
 
 export function emptyDigestInput(): DigestInput {
-  return { assigned: [], mentions: [], notes: [], overdue: [], dueToday: [], created: [], done: [], comments: [] };
+  return { assigned: [], mentions: [], notes: [], changes: [], overdue: [], dueToday: [], created: [], done: [], comments: [] };
 }
 
 /** Lo que identifica un elemento del resumen: la tarea o, en «notes», la nota. */
@@ -83,6 +83,7 @@ function heading(key: DigestSectionKey, t: T): string {
     case "assigned": return t("Asignadas a ti");
     case "mentions": return t("Te han mencionado en tareas");
     case "notes": return t("Te han mencionado en notas");
+    case "changes": return t("Cambios de fecha límite y recordatorios");
     case "overdue": return t("Tus tareas vencidas");
     case "dueToday": return t("Tus tareas que vencen hoy");
     case "created": return t("Tareas nuevas");
@@ -91,11 +92,11 @@ function heading(key: DigestSectionKey, t: T): string {
   }
 }
 
-function itemText(i: DigestItem, t: T, mention = false): string {
+function itemText(i: DigestItem, t: T, kind?: DigestSectionKey): string {
   const title = t("«{title}»", { title: mentionsToPlain(i.title) });
   if (i.more) return `${title} ${t("y {n} más", { n: i.more })}`;
   if (i.docId) return i.count && i.count > 1 ? `${title} (${t("{n} menciones", { n: i.count })})` : title;
-  return i.count && i.count > 1 ? `${title} (${t(mention ? "{n} menciones" : "{n} comentarios", { n: i.count })})` : title;
+  return i.count && i.count > 1 ? `${title} (${kind === "mentions" ? t("{n} menciones", { n: i.count }) : kind === "changes" ? t("{n} avisos", { n: i.count }) : t("{n} comentarios", { n: i.count })})` : title;
 }
 
 /**
@@ -130,7 +131,7 @@ export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name
     ...digest.sections.map((s) =>
       [
         `${heading(s.key, t)} (${s.total})`,
-        ...s.projects.flatMap((p) => [`  ${p.projectName}`, ...p.items.map((i) => `    - ${itemText(i, t, s.key === "mentions")} ${link(i)}`)]),
+        ...s.projects.flatMap((p) => [`  ${p.projectName}`, ...p.items.map((i) => `    - ${itemText(i, t, s.key)} ${link(i)}`)]),
         ...(s.hidden ? [`    ${t("… y {n} más", { n: s.hidden })}`] : []),
       ].join("\n"),
     ),
@@ -146,7 +147,7 @@ ${digest.sections
 ${s.projects
   .map(
     (p) => `<p style="margin:8px 0 2px;color:#64748b;font-size:13px">${escapeHtml(p.projectName)}</p>
-<ul style="margin:0;padding-left:20px">${p.items.map((i) => `<li><a href="${escapeHtml(link(i))}" style="color:#4f46e5;text-decoration:none">${escapeHtml(itemText(i, t, s.key === "mentions"))}</a></li>`).join("")}</ul>`,
+<ul style="margin:0;padding-left:20px">${p.items.map((i) => `<li><a href="${escapeHtml(link(i))}" style="color:#4f46e5;text-decoration:none">${escapeHtml(itemText(i, t, s.key))}</a></li>`).join("")}</ul>`,
   )
   .join("\n")}${s.hidden ? `<p style="margin:4px 0;color:#64748b;font-size:13px">${escapeHtml(t("… y {n} más", { n: s.hidden }))}</p>` : ""}`,
   )

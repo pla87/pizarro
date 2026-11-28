@@ -5,10 +5,12 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, beforeEach, describe, test } from "node:test";
+import { updateEmailPrefs } from "../../src/actions/collab-prefs";
 import { addComment } from "../../src/actions/tasks";
+import { sendProjectAddedMail } from "../../src/lib/auth-mail";
 import { afterDone, asUser, db, expectOk, makeProject, makeTask, makeUser } from "./helpers";
 import { mentionToken } from "../../src/lib/mentions";
-import { deliver } from "../../src/lib/notify";
+import { deliver, emailWanted, notifyReportUnsubscribed, notifyShareRevoked } from "../../src/lib/notify";
 import { gatherDigest, sendDueDigests } from "../../src/lib/periodic-mail";
 import { applyUnsubscribe } from "../../src/lib/unsubscribe";
 import { unsubscribeToken } from "../../src/lib/unsubscribe-core";
@@ -38,8 +40,9 @@ const at = (u: { id: string; name: string }) => mentionToken(u.name, u.id);
 describe("conversión de las cuentas existentes (migración 20261210100000)", () => {
   test("casilla principal, administración y resumen: nadie recibe lo que no recibía ni pierde lo que tenía", async () => {
     const sql = await readFile(path.join(process.cwd(), "prisma/migrations/20261210100000_avisos_email_simples/migration.sql"), "utf8");
-    const updates = sql.split("\n").filter((l) => l.startsWith("UPDATE"));
-    assert.equal(updates.length, 3);
+    // Todas las sentencias UPDATE de la migración (sean las que sean), de «UPDATE» a su «;».
+    const updates = [...sql.matchAll(/^UPDATE[^;]*;/gm)].map((m) => m[0]);
+    assert.ok(updates.length > 0);
     // Estado anterior a la migración de cuatro personas, escrito a mano (las columnas nuevas se vuelven a calcular).
     const mk = async (data: Record<string, unknown>) => {
       const u = await makeUser();
@@ -50,7 +53,15 @@ describe("conversión de las cuentas existentes (migración 20261210100000)", ()
     const nothing = await mk({ notifyEmail: false, notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, dailyDigest: false });
     const digestOnly = await mk({ notifyEmail: false, notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, dailyDigest: true });
     const dueOnly = await mk({ notifyEmail: false, notifyAssignedEmail: false, notifyDueEmail: true, notifyCommentEmail: false, dailyDigest: false });
-    const ids = [mentionsOnly, nothing, digestOnly, dueOnly];
+    // Con resumen y menciones marcadas (recibía los emails al momento además del resumen): ahora solo en el resumen.
+    const digestAndMentions = await mk({ notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, dailyDigest: true });
+    // noteMentionEmail (v1.77) no se convierte: las menciones quedan como estaban en notifyEmail, sea cual sea la opción de notas.
+    const noteOffMentions = await mk({ notifyEmail: true, noteMentionEmail: "OFF", notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, dailyDigest: false });
+    const noteNowNoMentions = await mk({ notifyEmail: false, noteMentionEmail: "NOW", notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, dailyDigest: false });
+    // Administrador y no administrador se convierten igual (la casilla de administración es de todos).
+    const adminRole = await makeUser({ role: "ADMIN" });
+    await db.user.update({ where: { id: adminRole.id }, data: { emailNotices: true, notifyAdminEmail: true, notifyEmail: false, notifyAssignedEmail: false, notifyDueEmail: false, notifyCommentEmail: false, dailyDigest: false } });
+    const ids = [mentionsOnly, nothing, digestOnly, dueOnly, digestAndMentions, noteOffMentions, noteNowNoMentions, adminRole.id];
     // Las mismas sentencias de la migración, acotadas a estas cuatro cuentas (en una transacción que se deshace).
     const sentinel = new Error("rollback");
     const rows = await db
@@ -76,6 +87,13 @@ describe("conversión de las cuentas existentes (migración 20261210100000)", ()
     assert.deepEqual([by(digestOnly).emailNotices, by(digestOnly).dailyDigest, by(digestOnly).notifyAssignedEmail, by(digestOnly).notifyDueEmail, by(digestOnly).notifyCommentEmail], [true, true, true, true, true]);
     // Solo fechas (sin resumen): sigue al momento y no se marca nada más.
     assert.deepEqual([by(dueOnly).emailNotices, by(dueOnly).notifyAdminEmail, by(dueOnly).notifyAssignedEmail, by(dueOnly).notifyCommentEmail], [true, false, false, false]);
+    // Resumen con menciones: sigue en resumen, con las menciones y la administración como estaban.
+    assert.deepEqual([by(digestAndMentions).emailNotices, by(digestAndMentions).dailyDigest, by(digestAndMentions).notifyEmail, by(digestAndMentions).notifyAdminEmail], [true, true, true, true]);
+    // noteMentionEmail se ignora: «No» en notas con menciones marcadas deja las menciones; «Al momento» en notas sin menciones, nada.
+    assert.deepEqual([by(noteOffMentions).emailNotices, by(noteOffMentions).notifyEmail], [true, true]);
+    assert.deepEqual([by(noteNowNoMentions).emailNotices, by(noteNowNoMentions).notifyEmail, by(noteNowNoMentions).notifyAdminEmail], [false, false, false]);
+    // Una administradora con las menciones apagadas: la administración (que viajaba con notifyEmail) se copia, apagada.
+    assert.deepEqual([by(adminRole.id).notifyAdminEmail, by(adminRole.id).notifyEmail], [false, false]);
   });
 });
 
@@ -114,7 +132,7 @@ describe("envío al momento y en el resumen", () => {
     const prefs = await db.user.findUniqueOrThrow({ where: { id: reader.id }, select: { id: true, role: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true } });
     const d = await gatherDigest(prefs, now, today);
     assert.deepEqual(d.mentions?.map((i) => i.taskId), [task.id]);
-    assert.ok(d.comments.some((i) => i.taskId === task.id), "el comentario con la mención cuenta en los comentarios marcados");
+    assert.ok(!d.comments.some((i) => i.taskId === task.id), "el comentario con la mención no se repite en «Comentarios»");
     // Sin las menciones marcadas, el resumen no las trae; sin asignaciones ni fechas marcadas, tampoco.
     const without = await gatherDigest({ ...prefs, notifyEmail: false }, now, today);
     assert.deepEqual([without.mentions, without.notes], [[], []]);
@@ -168,5 +186,93 @@ describe("envío al momento y en el resumen", () => {
     assert.equal(res?.changed, true);
     const row = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { notifyAdminEmail: true, notifyEmail: true, emailNotices: true } });
     assert.deepEqual(row, { notifyAdminEmail: false, notifyEmail: true, emailNotices: true });
+  });
+});
+
+describe("revisión de «Avisos por email» (vuelta 2)", () => {
+  const prep = async (prefs: Record<string, unknown>) => {
+    const u = await makeUser();
+    await db.user.update({ where: { id: u.id }, data: { emailNotices: true, notifyAdminEmail: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: false, ...prefs } });
+    return db.user.findUniqueOrThrow({ where: { id: u.id } });
+  };
+
+  test("«te han añadido al proyecto»: su enlace de baja es el de administración, no el de menciones", async () => {
+    const u = await prep({});
+    await sendProjectAddedMail(u, "Ana", "Proyecto X", "https://pizarro.test/p/x");
+    const m = (await mails()).find((x) => x.to === u.email);
+    assert.ok(m, "se envía");
+    const token = /\/unsubscribe\/([A-Za-z0-9_.-]+)/.exec(m.text)?.[1];
+    assert.ok(token?.startsWith("x"), `baja de administración (x), no ${token?.slice(0, 1)}`);
+    assert.equal((await applyUnsubscribe(token!, "page", "127.0.0.1"))?.changed, true);
+    const row = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { notifyAdminEmail: true, notifyEmail: true } });
+    assert.deepEqual(row, { notifyAdminEmail: false, notifyEmail: true });
+  });
+
+  test("quien no es administrador recibe los avisos importantes y los apaga con su casilla, sin tocar las menciones", async () => {
+    const setter = await prep({});
+    const generator = await prep({});
+    const quiet = await prep({ notifyAdminEmail: false });
+    const f = await makeProject({ members: [setter, generator, quiet] });
+    const a = await notifyReportUnsubscribed(f.project.id, setter.id, "Ex Destinatario");
+    const b = await notifyShareRevoked(f.project.id, generator.id, "Otra Persona", "Columna");
+    const c = await notifyReportUnsubscribed(f.project.id, quiet.id, "Ex Destinatario");
+    await afterDone();
+    assert.ok(a && b && c);
+    const to = (await mails()).map((m) => m.to);
+    assert.ok(to.includes(setter.email) && to.includes(generator.email));
+    assert.ok(!to.includes(quiet.email), "con su casilla apagada no sale (sigue en la campana)");
+    assert.equal(await db.notification.count({ where: { userId: quiet.id, type: "REPORT_UNSUBSCRIBED" } }), 1);
+  });
+
+  test("collab-prefs: un miembro guarda «Avisos importantes» y se acepta (e ignora) noteMentionEmail", async () => {
+    const u = await prep({});
+    const base = { notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: false, digestHour: 8 };
+    await asUser(u, async () => expectOk(await updateEmailPrefs({ ...base, emailNotices: true, notifyAdminEmail: false, noteMentionEmail: "OFF" })));
+    const row = await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { notifyAdminEmail: true, noteMentionEmail: true } });
+    assert.deepEqual(row, { notifyAdminEmail: false, noteMentionEmail: null });
+  });
+
+  test("resumen: cambios de fecha y recordatorios de «Esperando» llegan en su sección, solo con la casilla de fechas", async () => {
+    const author = await makeUser();
+    const reader = await prep({ dailyDigest: true });
+    const f = await makeProject({ members: [author, reader] });
+    const task = await makeTask(f, { createdById: author.id });
+    await db.notification.createMany({ data: [
+      { userId: reader.id, actorId: author.id, taskId: task.id, type: "DUE_CHANGED", excerpt: "x" },
+      { userId: reader.id, actorId: null, taskId: task.id, type: "WAITING", excerpt: "y" },
+    ] });
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const d = await gatherDigest(reader, now, today);
+    assert.deepEqual(d.changes?.map((i) => [i.taskId, i.count]), [[task.id, 2]]);
+    const without = await gatherDigest({ ...reader, notifyDueEmail: false }, now, today);
+    assert.deepEqual(without.changes, []);
+    // Y no sale al momento con resumen diario.
+    assert.equal(emailWanted("DUE_CHANGED", reader), false);
+    assert.equal(emailWanted("WAITING", reader), false);
+  });
+
+  test("resumen: los comentarios son solo de tareas que sigue y no repiten los que ya salen en menciones", async () => {
+    const author = await makeUser();
+    const reader = await prep({ dailyDigest: true });
+    const f = await makeProject({ members: [author, reader] });
+    const followed = await makeTask(f, { createdById: reader.id });
+    const notFollowed = await makeTask(f, { createdById: author.id });
+    const muted = await makeTask(f, { createdById: reader.id });
+    await db.taskFollower.create({ data: { taskId: muted.id, userId: reader.id, muted: true } });
+    const explicit = await makeTask(f, { createdById: author.id });
+    await db.taskFollower.create({ data: { taskId: explicit.id, userId: reader.id, muted: false } });
+    const mentioned = await makeTask(f, { createdById: reader.id });
+    for (const t of [followed, notFollowed, muted, explicit, mentioned]) {
+      await db.taskComment.create({ data: { taskId: t.id, authorId: author.id, body: "hola" } });
+    }
+    // En «mentioned», un comentario con mención (ya sale en menciones) y otro sin ella.
+    const withMention = await db.taskComment.create({ data: { taskId: mentioned.id, authorId: author.id, body: "con mención" } });
+    await db.notification.create({ data: { userId: reader.id, actorId: author.id, taskId: mentioned.id, commentId: withMention.id, type: "MENTION", excerpt: "m" } });
+    const now = new Date();
+    const d = await gatherDigest(reader, now, now.toISOString().slice(0, 10));
+    assert.deepEqual(new Set(d.comments.map((i) => i.taskId)), new Set([followed.id, explicit.id, mentioned.id]));
+    assert.equal(d.comments.find((i) => i.taskId === mentioned.id)?.count, 1, "el comentario con mención no se cuenta otra vez");
+    assert.deepEqual(d.mentions?.map((i) => i.taskId), [mentioned.id]);
   });
 });

@@ -570,7 +570,7 @@ async function externalAllowed(actorId: string | null, type: NotificationKind, t
 /**
  * Aviso a cada administrador activo de que un proyecto privado ha pasado a ser de equipo al borrarse la cuenta de su
  * único miembro activo (eraseUser): uno por proyecto y administrador, con enlace al proyecto. En la campana siempre; por
- * email, Telegram y WhatsApp según sus preferencias de «Avisos de menciones» (emailWanted, channelWants). El texto se
+ * email, Telegram y WhatsApp según sus preferencias de «Emails de administración» (emailWanted, channelWants). El texto se
  * escribe al leerlo, en el idioma de cada uno. `deletedName` queda en el extracto (la cuenta ya no existe). `excludeId`:
  * el administrador que ha borrado la cuenta, que acaba de ver la lista al confirmar.
  */
@@ -638,7 +638,7 @@ export async function notifyShareRevoked(projectId: string, generatorId: string,
 
 /**
  * Aviso de proyecto a una sola persona (REPORT_UNSUBSCRIBED, SHARE_REVOKED). En la campana siempre; por email, Telegram
- * y WhatsApp según sus preferencias de las menciones, como los demás avisos de administración (emailWanted,
+ * y WhatsApp según sus preferencias («Emails de administración»: cualquier miembro la tiene, no solo los administradores; emailWanted,
  * channelWants), con el tope por hora de los avisos del sistema. Solo si sigue activa y viendo el proyecto.
  */
 async function notifyProjectPerson(type: "REPORT_UNSUBSCRIBED" | "SHARE_REVOKED", projectId: string, userId: string, excerpt: string, log: { action: string; label: string; labelExternal: string }): Promise<string | null> {

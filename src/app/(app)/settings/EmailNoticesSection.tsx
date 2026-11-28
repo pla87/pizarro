@@ -27,7 +27,7 @@ type EmailPrefs = {
 interface Props {
   prefs: EmailPrefs;
   emailAvailable: boolean;
-  /** Administrador: ve la casilla de los emails de administración (los demás no la tienen). */
+  /** Administrador: la casilla de administración lleva su título completo (los demás la ven como «Avisos importantes») y puede configurar el email. */
   adminNotices: boolean;
   /** Zona horaria de la app (la hora del resumen es de esa zona). */
   timeZone: string;
@@ -35,8 +35,9 @@ interface Props {
 
 /**
  * «Avisos por email» de Mi perfil → Avisos, como la sección de avisos push: una casilla principal y, solo si está marcada,
- * sus opciones, con un solo botón que lo guarda todo a la vez. Dos grupos: emails de administración de Pizarro (solo para
- * administradores; siempre al momento) y emails sobre proyectos (menciones, asignaciones, fechas, comentarios), con su
+ * sus opciones, con un solo botón que lo guarda todo a la vez. Dos grupos: emails de administración de Pizarro (siempre al
+ * momento; la casilla la ven todos: quien no es administrador también recibe avisos importantes, como que le añadan a un
+ * proyecto, y se llama «Avisos importantes») y emails sobre proyectos (menciones, asignaciones, fechas, comentarios), con su
  * frecuencia: al momento o en el resumen diario (con su hora). En la app (la campana) los avisos se crean siempre.
  * Telegram y WhatsApp van en su propia tarjeta (MessagingSection).
  */
@@ -81,7 +82,7 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
             const res = await updateEmailPrefs({
               emailNotices: sent.emailNotices, notifyEmail: sent.notifyEmail, notifyAssignedEmail: sent.notifyAssignedEmail, notifyDueEmail: sent.notifyDueEmail,
               notifyCommentEmail: sent.notifyCommentEmail, dailyDigest: sent.dailyDigest, digestHour: sent.digestHour,
-              ...(adminNotices ? { notifyAdminEmail: sent.notifyAdminEmail } : {}),
+              notifyAdminEmail: sent.notifyAdminEmail,
             });
             toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
             if (res.ok) setSaved(sent);
@@ -89,23 +90,23 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
         }}
       >
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input type="checkbox" name="email-notices" checked={form.emailNotices} onChange={(e) => set("emailNotices", e.target.checked)} />
+          <input type="checkbox" name="email-notices" checked={form.emailNotices} onChange={(e) => set("emailNotices", e.target.checked)} aria-expanded={form.emailNotices} aria-controls="email-notices-options" />
           {t("Recibir avisos por email")}
         </label>
         {form.emailNotices && (
-          <>
-            {adminNotices && (
-              <fieldset className="space-y-2">
-                <legend className="mb-1 text-xs font-medium text-slate-500">{t("Emails de administración de Pizarro")}</legend>
-                <label className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" className="mt-0.5" name="email-admin" checked={form.notifyAdminEmail} onChange={(e) => set("notifyAdminEmail", e.target.checked)} />
-                  <span>
-                    {t("Avisos de administración")}
-                    <span className="block text-xs text-slate-500">{t("Pocos y urgentes: salen siempre al momento.")}</span>
+          <div id="email-notices-options" className="space-y-4">
+            <fieldset className="space-y-2">
+              <legend className="mb-1 text-xs font-medium text-slate-500">{adminNotices ? t("Emails de administración de Pizarro") : t("Emails importantes de Pizarro")}</legend>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-0.5" name="email-admin" checked={form.notifyAdminEmail} onChange={(e) => set("notifyAdminEmail", e.target.checked)} />
+                <span>
+                  {adminNotices ? t("Avisos de administración") : t("Avisos importantes")}
+                  <span className="block text-xs text-slate-500">
+                    {adminNotices ? t("Pocos y urgentes: salen siempre al momento.") : t("Cuando te añaden a un proyecto o te afecta un cambio de un administrador. Siempre al momento.")}
                   </span>
-                </label>
-              </fieldset>
-            )}
+                </span>
+              </label>
+            </fieldset>
             <fieldset className="space-y-2">
               <legend className="mb-1 text-xs font-medium text-slate-500">{t("Emails sobre proyectos")}</legend>
               {projectBoxes.map(([key, label]) => (
@@ -133,8 +134,14 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
                   </>
                 )}
               </div>
+              {form.dailyDigest && !projectBoxes.some(([key]) => form[key]) && (
+                <p role="status" className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
+                  {t("Con el resumen diario y ninguna casilla de emails sobre proyectos marcada, no te llegará ningún resumen.")}
+                </p>
+              )}
             </fieldset>
-          </>
+          </div>
         )}
         <button className="btn-primary" disabled={pending || !dirty}>{t("Guardar avisos")}</button>
       </form>
