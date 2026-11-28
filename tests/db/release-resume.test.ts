@@ -9,6 +9,7 @@ import { deleteReleaseAttachments, deployRelease } from "../../src/actions/relea
 import { moveTask, updateTask } from "../../src/actions/tasks";
 import { undoLast } from "../../src/actions/undo";
 import { resumePendingReleaseAttachments, runReleaseAttachmentsJob, type PendingJob } from "../../src/lib/release-attachments";
+import { flushLogs } from "../../src/lib/log";
 import { attachmentPath } from "../../src/lib/uploads";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-resume-"));
@@ -122,6 +123,8 @@ describe("reanudar copias de adjuntos de una release", () => {
     // La copia ya llevaba uno cuando se pulsa «Borrar adjuntos».
     await db.releaseAttachment.create({ data: { releaseId: release.id, fileName: "F1_uno.pdf", size: 3, isImage: false, position: 0 } });
     expectOk(await deleteReleaseAttachments(release.id));
+    await flushLogs();
+    assert.match((await db.appLog.findFirstOrThrow({ where: { action: "releases.deleteReleaseAttachments" }, orderBy: { createdAt: "desc" } })).message, /Quitó los adjuntos copiados de la release «R»: 1/);
     let rel = await db.release.findUniqueOrThrow({ where: { id: release.id }, select: { attachmentsPending: true, _count: { select: { attachments: true } } } });
     assert.equal(rel.attachmentsPending, null);
     assert.equal(rel._count.attachments, 0);

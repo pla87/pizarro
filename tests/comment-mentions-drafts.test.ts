@@ -126,6 +126,22 @@ describe("borradores de comentarios", () => {
     assert.equal(store.has(commentDraftKey("u1", "t1")), false);
   });
 
+  test("al cerrar sesión se borran siempre los borradores de comentarios y de notas; el resto, solo si se pidió", async () => {
+    const { clearDraftsOnLogout, commentDraftKey, noteDraftKey } = await import("../src/components/board/draft-storage");
+    const fill = () => {
+      store.set(commentDraftKey("u1", "t1"), "{}");
+      store.set(noteDraftKey("u1", "d1"), "{}");
+      store.set("pz-draft-new:u1:p1", "{}");
+      store.set("pz-board-filter", "{}");
+    };
+    fill();
+    clearDraftsOnLogout(false);
+    assert.deepEqual([...store.keys()].sort(), ["pz-board-filter", "pz-draft-new:u1:p1"]);
+    fill();
+    clearDraftsOnLogout(true);
+    assert.deepEqual([...store.keys()], ["pz-board-filter"]);
+  });
+
   test("caduca al día y al cargar se limpian los caducados de todas las tareas", async () => {
     const { readCommentDraft, purgeExpiredCommentDrafts, commentDraftKey, COMMENT_DRAFT_MAX_AGE_MS } = await import("../src/components/board/draft-storage");
     const now = Date.now();

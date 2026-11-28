@@ -31,6 +31,12 @@ describe("deployRelease", () => {
     expectOk(await deployRelease({ ...input, taskIds: [ok.id, ok.id] }));
   });
 
+  test("rechaza una release sin tareas (no gasta un número)", async () => {
+    const { f } = await setup();
+    expectFail(await deployRelease({ projectId: f.project.id, title: "R", content: "Cambios", destination: "IN_PRODUCTION", taskIds: [] }), /Elige alguna tarea para la release/);
+    assert.equal(await db.release.count({ where: { projectId: f.project.id } }), 0);
+  });
+
   test("rechaza el despliegue si otra persona movió alguna tarea de columna desde que se generó el texto", async () => {
     const { f, prod } = await setup();
     const a = await makeTask(f, { title: "A", columnId: f.columns.done });

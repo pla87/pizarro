@@ -40,14 +40,20 @@ export function writeDraft(key: string, value: unknown): void {
   }
 }
 
+/** Borradores locales de las notas de Documentación (por persona y nota; los usa NoteEditor). */
+export const NOTE_DRAFT_PREFIX = "pz-draft-note:";
+export const noteDraftKey = (userId: string, docId: string) => `${NOTE_DRAFT_PREFIX}${userId}:${docId}`;
+
 /**
- * Lo que hay que borrar al cerrar sesión: los borradores de comentarios siempre (pueden contener menciones y texto
- * a medio escribir de una tarea ajena, y son de un día); el resto de borradores, solo si la persona lo pidió en su perfil.
+ * Lo que hay que borrar al cerrar sesión: los borradores de comentarios y de notas siempre (los de comentarios pueden
+ * contener menciones y texto a medio escribir de una tarea ajena; los de notas, hasta 200.000 caracteres de un proyecto
+ * que puede ser privado, y en un equipo compartido sobrevivirían al cierre de sesión); el resto de borradores, solo si
+ * la persona lo pidió en su perfil.
  */
 export function clearDraftsOnLogout(all: boolean): void {
   if (all) return clearAllDrafts();
   try {
-    for (const key of Object.keys(localStorage)) if (key.startsWith(COMMENT_PREFIX)) localStorage.removeItem(key);
+    for (const key of Object.keys(localStorage)) if (key.startsWith(COMMENT_PREFIX) || key.startsWith(NOTE_DRAFT_PREFIX)) localStorage.removeItem(key);
   } catch {
     // Sin acceso a localStorage no hay borradores que borrar.
   }

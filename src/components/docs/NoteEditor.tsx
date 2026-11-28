@@ -2,8 +2,8 @@
 
 import { Check, Loader2, Pencil, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getNote, saveNote } from "@/actions/documents";
-import { clearDraft, readDraft, writeDraft } from "@/components/board/draft-storage";
+import { discardEmptyNote, getNote, saveNote } from "@/actions/documents";
+import { clearDraft, noteDraftKey as draftKey, readDraft, writeDraft } from "@/components/board/draft-storage";
 import { DescriptionField } from "@/components/ui/DescriptionField";
 import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
 import { useToast } from "@/components/ui/Toast";
@@ -24,9 +24,6 @@ import { uploadDocument } from "./uploadDocuments";
 // de guardar ante lo que reintentar no arregla (la nota en la papelera, la cuota llena, el máximo de caracteres) y lo dice.
 // Lo escrito y aún no guardado se copia en el navegador (borrador local, como el de las tareas) poco después de cada
 // cambio y siempre al cerrar u ocultar: sin red, al recargar o si el cierre no llega a guardar, se recupera al volver.
-
-/** Clave del borrador local de una nota (por persona y nota). */
-const draftKey = (userId: string, docId: string) => `pz-draft-note:${userId}:${docId}`;
 
 /** Lo que se guarda como borrador: el texto y la versión del servidor sobre la que se escribió. */
 interface NoteDraft {
@@ -53,9 +50,13 @@ interface Props {
   onUploaded?: () => void;
   /** La nota resultó estar en la papelera (la mandó otra persona): la lista debe refrescarse. */
   onTrashed?: () => void;
+  /** Recién creada con «Nueva nota»: si se cierra sin haber escrito nada, se descarta (no queda una nota vacía). */
+  discardIfEmpty?: boolean;
+  /** Se descartó la nota vacía al cerrar (la lista debe refrescarse). */
+  onDiscarded?: () => void;
 }
 
-export function NoteEditor({ docId, projectId, currentUserId, editorMode, users, fileMaxMb, startEditing = false, onSaved, onUploaded, onTrashed }: Props) {
+export function NoteEditor({ docId, projectId, currentUserId, editorMode, users, fileMaxMb, startEditing = false, onSaved, onUploaded, onTrashed, discardIfEmpty = false, onDiscarded }: Props) {
   const t = useT();
   const toast = useToast();
   const key = draftKey(currentUserId, docId);
@@ -85,9 +86,13 @@ export function NoteEditor({ docId, projectId, currentUserId, editorMode, users,
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
-  const callbacks = useRef({ onSaved, onUploaded, onTrashed });
+  const callbacks = useRef({ onSaved, onUploaded, onTrashed, onDiscarded });
+  const discardRef = useRef(discardIfEmpty);
+  /** El texto del servidor ya se cargó (sin eso, «vacía» no se sabe). */
+  const readyRef = useRef(false);
   useEffect(() => {
-    callbacks.current = { onSaved, onUploaded, onTrashed };
+    callbacks.current = { onSaved, onUploaded, onTrashed, onDiscarded };
+    discardRef.current = discardIfEmpty;
   });
 
   const dirty = () => textRef.current !== savedRef.current;
@@ -235,6 +240,7 @@ export function NoteEditor({ docId, projectId, currentUserId, editorMode, users,
           setText(content);
           setEditing(startEditing && !res.data.trashed);
         }
+        readyRef.current = true;
         setLoaded("ready");
       },
       () => setLoaded("error"),
@@ -264,6 +270,19 @@ export function NoteEditor({ docId, projectId, currentUserId, editorMode, users,
       }
     };
   }, [save, flushDraft]);
+
+  // Solo al cerrar el visor (no cuando el efecto de arriba se repite): una nota nueva cerrada sin escribir nada (cargada, nunca
+  // guardada, sin guardado en curso ni conflicto) se descarta. El servidor la borra solo si sigue vacía, sin guardar, sin
+  // renombrar y sin fijar, así que no se pierde nada.
+  useEffect(() => {
+    return () => {
+      if (!discardRef.current || !readyRef.current || inflight.current || conflictRef.current || stopRef.current) return;
+      if (baseRef.current !== 0 || savedRef.current !== "" || textRef.current !== "") return;
+      void discardEmptyNote(docId).then((r) => {
+        if (r.ok && r.data.discarded) callbacks.current.onDiscarded?.();
+      }).catch(() => {});
+    };
+  }, [docId]);
 
   // El aviso de cambio simultáneo se lleva el foco: quien usa el teclado o un lector de pantalla se entera y elige ahí.
   useEffect(() => {

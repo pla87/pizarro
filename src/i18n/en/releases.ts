@@ -49,4 +49,7 @@ export const releases: Record<string, string> = {
   "{n} de las tareas han cambiado de tipo mientras tanto: vuelve a generar la release.": "{n} of the tasks have changed type in the meantime: generate the release again.",
   // Ronda 69: imágenes de la descripción en el .md y .txt descargados
   "imagen": "image",
+  // Logs de borrar los adjuntos de una release y release sin tareas
+  "Quitó los adjuntos copiados de la release «{title}»: {n}": "Removed the copied attachments of the release “{title}”: {n}",
+  "Elige alguna tarea para la release.": "Choose at least one task for the release.",
 };

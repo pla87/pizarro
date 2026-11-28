@@ -26,15 +26,6 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 100;
 
-// Las categorías del desplegable se recuerdan 60 s: agrupar toda la tabla de logs en cada vista es caro.
-let categoriesCache: { at: number; rows: { category: string }[] } | null = null;
-async function logCategories(): Promise<{ category: string }[]> {
-  if (categoriesCache && Date.now() - categoriesCache.at < 60_000) return categoriesCache.rows;
-  const rows = (await db.appLog.groupBy({ by: ["category"], orderBy: { category: "asc" } })).map((c) => ({ category: c.category }));
-  categoriesCache = { at: Date.now(), rows };
-  return rows;
-}
-
 const LEVELS = [
   { value: "info", label: "Info", badge: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
   { value: "warn", label: "Aviso", badge: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" },
@@ -79,6 +70,9 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   // Compacta y con segundos, en el formato del idioma («22 nov 21:49:12»; «Nov 22 9:49:12 PM»). El CSV sigue en
   // AAAA-MM-DD HH:MM:SS (lo lee bien Excel).
   const formatTime = logTimeFormatter(locale);
+  // Las categorías que escribe el código son siempre estas (agrupar toda la tabla de logs en cada vista era caro). Si un
+  // enlace guardado trae otra, se añade para que el desplegable siga mostrando el filtro activo.
+  const categories = Object.keys(CATEGORY_LABELS).concat(filters.category && !(filters.category in CATEGORY_LABELS) ? [filters.category] : []);
   const categoryLabel = (c: string) => (CATEGORY_LABELS[c] ? t(CATEGORY_LABELS[c]!) : c);
 
   // Escribe los eventos pendientes para que los más recientes aparezcan.
@@ -88,7 +82,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   // existe (se purgó), la lista queda vacía, como con el cursor de Prisma.
   const after = cursor ? await db.appLog.findUnique({ where: { id: cursor }, select: { id: true, createdAt: true } }) : null;
   const where = logWhere(filters, mine);
-  const [rows, levelCounts, categories, users] = await Promise.all([
+  const [rows, levelCounts, users] = await Promise.all([
     cursor && !after
       ? []
       : db.appLog.findMany({
@@ -97,7 +91,6 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           take: PAGE_SIZE + 1,
         }),
     db.appLog.groupBy({ by: ["level"], where: logWhere(filters, mine, false), _count: { _all: true } }),
-    logCategories(),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   const hasMore = rows.length > PAGE_SIZE;
@@ -195,7 +188,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {t("Categoría")}
           <select name="category" defaultValue={filters.category} className={field}>
             <option value="">{t("Todas")}</option>
-            {categories.map((c) => ({ value: c.category, label: categoryLabel(c.category) })).sort((a, b) => a.label.localeCompare(b.label, locale)).map((c) => (
+            {categories.map((c) => ({ value: c, label: categoryLabel(c) })).sort((a, b) => a.label.localeCompare(b.label, locale)).map((c) => (
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>

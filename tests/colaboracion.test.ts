@@ -90,6 +90,23 @@ test("informe semanal: no se repite si el último salió hace menos de 3 días",
   assert.equal(reportDue(new Date("2026-10-26T07:10:00Z"), tz, { weekday: 1, hour: 8, lastSentAt: new Date("2026-10-25T09:00:00Z") }), false);
 });
 
+test("informe semanal: si falló el día elegido, sale en cuanto pueda; sin dos en la misma semana", () => {
+  const tz = "Europe/Madrid";
+  const sentMonday = new Date("2026-10-19T06:10:00Z"); // lunes 08:10
+  const s = { weekday: 1, hour: 8, lastSentAt: sentMonday };
+  // El lunes 26 el servidor estaba parado todo el día: el martes antes de cumplirse 8 días aún no toca...
+  assert.equal(reportDue(new Date("2026-10-27T05:00:00Z"), tz, s), false); // martes 06:00: 7 días y 22 h
+  // ...y desde las 8 días y poco (martes por la mañana) sí, aunque no sea el día elegido.
+  assert.equal(reportDue(new Date("2026-10-27T07:30:00Z"), tz, s), true);
+  assert.equal(reportDue(new Date("2026-10-29T10:00:00Z"), tz, s), true);
+  // Recuperado el martes: no vuelve a salir hasta el lunes siguiente (menos de 3 días y luego el día elegido).
+  const recovered = new Date("2026-10-27T07:30:00Z");
+  assert.equal(reportDue(new Date("2026-10-28T07:30:00Z"), tz, { ...s, lastSentAt: recovered }), false);
+  assert.equal(reportDue(new Date("2026-11-02T07:30:00Z"), tz, { ...s, lastSentAt: recovered }), true);
+  // Sin ningún envío anterior no se recupera nada: activar el informe a mitad de semana no manda uno al momento.
+  assert.equal(reportDue(new Date("2026-10-28T10:00:00Z"), tz, { ...s, lastSentAt: null }), false);
+});
+
 // --- Mis tareas ---
 
 test("mis tareas: grupos por vencimiento respecto a hoy", () => {
