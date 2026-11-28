@@ -192,9 +192,12 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
     setSending(false);
     // Si falla, el texto (y su borrador) se quedan para reintentar.
     if (!res.ok) return toast(res.error, "error");
-    persist({ text: "", replyTo: null });
-    setTextState("");
-    setReplyToState(null);
+    // La caja sigue editable durante el envío: si se escribió algo nuevo mientras tanto, se conserva (y su borrador).
+    if (draftRef.current.text.trim() === body) {
+      persist({ text: "", replyTo: null });
+      setTextState("");
+      setReplyToState(null);
+    }
     unlisted.current.add(res.data.id);
     // En su sitio por fecha (no al final): puede haber comentarios de otras personas posteriores que ya llegaron.
     setDetail((d) => (d ? { ...d, comments: mergeComments(d.comments, [res.data]), commentCount: d.commentCount + 1 } : d));
